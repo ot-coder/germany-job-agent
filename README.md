@@ -2,12 +2,12 @@
 
 Find jobs in Germany for **your field and your city**, get a **daily digest** on your phone, and **track every application** — without signing up anywhere, installing anything, or handing your data to anyone.
 
-- **Daily job feed.** Every morning at 08:00 (Berlin time) it searches the Bundesagentur für Arbeit, Arbeitnow and Remotive, removes duplicates, scores each listing for fit, and publishes a dashboard on your own GitHub Pages site.
-- **Daily notification.** A short digest of new matches arrives as a GitHub notification (GitHub mobile app and email). Telegram is optional.
+- **Daily job feed.** Every morning at 08:00 (Berlin time) it searches the Bundesagentur für Arbeit, Arbeitnow and Remotive, removes duplicates, ranks each listing with a transparent 100-point score (role fit, experience level, location, German-language requirement, recency …), and publishes a dashboard on your own GitHub Pages site.
+- **Daily notification, no spam.** Only the best *new* matches (score 75+, at most 5 a day) arrive as a GitHub notification (GitHub mobile app and email); quiet days send nothing. Telegram is optional.
 - **Application tracker.** Press **Applied** on a listing, or answer *“Did you apply?”* when you come back from a posting, and it lands in *My applications* with status, notes, follow-up reminders and stats. Gmail auto-detection is optional.
 - **Your data stays yours.** The job feed is public listings. Everything you save, apply to or write is stored only in your browser. There is no server and no database, and nothing is collected.
 
-Live example: **https://ot-coder.github.io/germany-job-agent/** (computer-science roles across Germany plus part-time work around Leipzig).
+Live example: **https://ot-coder.github.io/germany-job-agent/**: the author's own search for early-career technology and technology-adjacent roles across Germany ([why it is set up this way](docs/JOB_SEARCH_STRATEGY.md)).
 
 ## Get your own in 5 minutes
 
@@ -21,7 +21,7 @@ You only need a free GitHub account.
    | Job field (comma-separated, add German words) | `marketing, social media, kommunikation` |
    | City | `Köln` |
    | Radius (km) | `30` |
-   | Level | `student` (Werkstudent + entry level), `entry`, or `any` (any non-senior role) |
+   | Level | `student` (Werkstudent, internship, entry level, part-time), `entry`, or `any` (any non-senior role) |
    | Where to look for your field | `germany` or `local` |
    | Also list part-time/minijobs near you | ✓ |
 
@@ -52,7 +52,9 @@ title = "Marketing jobs · Köln"
 city = "Köln"
 radius_km = 30
 nearby_towns = []          # empty: trust the Bundesagentur radius search; or list towns to allow
-min_score = 55             # 0–100; raise it for fewer, better matches
+min_score = 65             # 0–100; jobs below this are not shown
+notify_min_score = 75      # new jobs at or above this are sent as notifications…
+notify_limit = 5           # …at most this many per day
 include_remote = true      # also pull remote roles from Remotive
 gmail_client_id = ""       # optional, see guides/gmail.md (a client ID is not a secret)
 
@@ -61,9 +63,22 @@ id = "field"
 label = "Marketing"
 scope = "germany"          # "germany" or "local" (within radius_km of city)
 keywords = ["marketing", "social media", "kommunikation"]   # one must appear in the job title
-levels = ["werkstudent", "entry-level", "part-time", "minijob"]  # add "any" for regular roles
+levels = ["werkstudent", "internship", "entry-level", "part-time", "minijob"]  # or ["any"]
 queries = ["werkstudent marketing", "junior marketing"]          # searches sent to the Bundesagentur
 ```
+
+**Role families (optional).** Instead of one `keywords` list, a category can split your field into weighted families, each shown as a filter on the dashboard. The live example uses five (Core Tech, Product & Project, Business & Tech, Enterprise IT, Broader Professional); see its [`jobs-agent.toml`](jobs-agent.toml):
+
+```toml
+[[categories.families]]
+id = "PRODUCT_PROJECT"
+label = "Product & Project"
+points = 18                # role-fit share of the score, max 20
+realism_bonus = 2          # small boost for realistic entry points
+keywords = ["product manager", "project coordinator", "scrum master"]
+```
+
+**How the score works.** Every job gets up to 20 points for role fit, 20 for experience level (Werkstudent/junior wording scores high; "5+ years" scores low), 15 for realism, 10 each for location, German-language requirement, keyword relevance and career value, and 5 for recency. Senior, lead, head-of and director titles are always filtered out, but "manager" on its own is not. The reasoning is in [docs/JOB_SEARCH_STRATEGY.md](docs/JOB_SEARCH_STRATEGY.md).
 
 **Job sources:** two of the three sources (Bundesagentur für Arbeit and Arbeitnow) only cover Germany.
 

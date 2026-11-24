@@ -12,7 +12,7 @@ def render_digest(jobs: list[dict], new_count: int, limit: int = 10) -> str:
         return "\n".join(lines + ["No suitable roles are currently stored."])
     for index, job in enumerate(jobs[:limit], 1):
         lines.append(f"{index}. **[{job['title']}]({job['url']})** — {job['company']}")
-        lines.append(f"   {job['location']} · {job['role_type']} · **{job['score']}/100** · {', '.join(job['reasons'])}")
+        lines.append(f"   {job['location']} · {job['role_family']} · **{job['score']}/100** · {', '.join(job['reasons'])}")
     lines.extend(["", "Open the local dashboard with: `python3 -m jobs_agent serve`"])
     return "\n".join(lines)
 

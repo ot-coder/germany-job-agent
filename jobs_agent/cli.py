@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import Callable
 
 from .config import DEFAULT_PROFILE, Profile, load_config
-from .core import Job
 from .publish import digest_markdown, publish_jobs, telegram_message
 from .setup import add_setup_arguments, run_setup
-from .sources import fetch_all
+from .sources import FetchResult, fetch_all
 from .store import JobStore
 from .web import render_digest, serve
 
@@ -20,35 +19,35 @@ def default_db_path() -> Path:
     return Path(os.environ.get("JOBS_AGENT_DB", Path.cwd() / "data" / "jobs.db"))
 
 
-def run_fetch(store: JobStore, fetcher: Callable[[], list[Job]] = fetch_all) -> tuple[int, str]:
-    jobs = fetcher()
-    new_count = store.upsert(jobs)
+def run_fetch(store: JobStore, fetcher: Callable[[], FetchResult] = fetch_all) -> tuple[int, str]:
+    result = fetcher()
+    new_count = store.upsert(result.jobs)
     return new_count, render_digest(store.list_jobs(limit=10), new_count)
 
 
 def run_publish(
-    fetcher: Callable[[], list[Job]],
+    fetcher: Callable[[], FetchResult],
     docs_dir: Path,
     message_path: Path,
     site_url: str,
     profile: Profile = DEFAULT_PROFILE,
     digest_path: Path | None = None,
 ) -> int:
-    jobs = fetcher()
-    new_jobs = publish_jobs(jobs, docs_dir, profile)
+    result = fetcher()
+    new_jobs = publish_jobs(result.jobs, docs_dir, profile)
+    stats = (result.evaluated, result.duplicates_removed, result.passed_threshold)
     config_path = Path(docs_dir) / "config.json"
     public = json.loads(config_path.read_text(encoding="utf-8"))
     public["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     config_path.write_text(json.dumps(public, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     message_path.parent.mkdir(parents=True, exist_ok=True)
-    message_path.write_text(
-        telegram_message(new_jobs, site_url, total_jobs=len(jobs), profile=profile), encoding="utf-8"
-    )
+    message_path.write_text(telegram_message(new_jobs, *stats, site_url, profile=profile), encoding="utf-8")
     if digest_path is not None:
         digest_path.parent.mkdir(parents=True, exist_ok=True)
         digest_path.write_text(
-            digest_markdown(new_jobs, site_url, total_jobs=len(jobs), profile=profile), encoding="utf-8"
+            digest_markdown(new_jobs, *stats, site_url, total_jobs=len(result.jobs), profile=profile),
+            encoding="utf-8",
         )
     return len(new_jobs)
 
