@@ -1,0 +1,105 @@
+name: Set up my job agent
+
+# Run this once from the Actions tab (Actions → "Set up my job agent" → Run workflow).
+# It writes jobs-agent.toml from your answers, then starts the first job search.
+on:
+  workflow_dispatch:
+    inputs:
+      field:
+        description: "Your job field, as comma-separated keywords. Add German words too, e.g.: software, entwickler, data"
+        required: true
+        type: string
+      city:
+        description: "Your city in Germany, e.g. Leipzig"
+        required: true
+        type: string
+      radius_km:
+        description: "Search radius around your city (km)"
+        required: true
+        default: 35
+        type: number
+      level:
+        description: "student = Werkstudent + entry level · entry = entry level · any = any non-senior role"
+        required: true
+        default: student
+        type: choice
+        options: [student, entry, any]
+      scope:
+        description: "Where to look for jobs in your field: germany = all of Germany · local = near your city"
+        required: true
+        default: germany
+        type: choice
+        options: [germany, local]
+      local_part_time:
+        description: "Also list part-time jobs and minijobs near your city"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: jobs-dashboard
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Write jobs-agent.toml
+        env:
+          FIELD: ${{ inputs.field }}
+          CITY: ${{ inputs.city }}
+          RADIUS: ${{ inputs.radius_km }}
+          LEVEL: ${{ inputs.level }}
+          SCOPE: ${{ inputs.scope }}
+          LOCAL_PART_TIME: ${{ inputs.local_part_time }}
+        run: |
+          python -m jobs_agent setup --field "$FIELD" --city "$CITY" --radius "$RADIUS" \
+            --level "$LEVEL" --scope "$SCOPE" --local-part-time "$LOCAL_PART_TIME"
+          cat jobs-agent.toml
+          # Start with an empty feed so the first digest only lists your own matches.
+          mkdir -p docs && echo "[]" > docs/jobs.json
+
+      - name: Commit configuration
+        run: |
+          git config user.name "jobs-agent[bot]"
+          git config user.email "jobs-agent[bot]@users.noreply.github.com"
+          git add jobs-agent.toml docs/jobs.json
+          if git diff --cached --quiet; then
+            echo "Configuration unchanged."
+          else
+            git commit -m "chore: configure job agent"
+            git push
+          fi
+
+      - name: Check GitHub Pages and start the first search
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if gh api "repos/$REPO/pages" --jq '.build_type' 2>/dev/null | grep -q workflow; then
+            gh workflow run refresh-jobs.yml --ref "$BRANCH" -f send_test_notification=true
+            {
+              echo "## ✅ Your job agent is set up"
+              echo "The first search has started. Your dashboard will be at $(gh api "repos/$REPO/pages" --jq .html_url) in a few minutes,"
+              echo "and a daily digest issue will notify you every morning at 08:00 (Berlin time)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## One more step: turn on GitHub Pages"
+              echo "1. Open https://github.com/$REPO/settings/pages"
+              echo "2. Under **Build and deployment → Source**, choose **GitHub Actions**."
+              echo "3. Go to Actions → **Refresh jobs and deploy dashboard** → **Run workflow**."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::GitHub Pages is not enabled yet. See the run summary for the one remaining step."
+          fi

@@ -3,7 +3,7 @@ import unittest
 from jobs_agent.sources import (
     _parse_ba_search_html,
     fetch_all,
-    is_leipzig_area,
+    is_local,
     normalize_arbeitnow,
     normalize_ba,
 )
@@ -18,9 +18,10 @@ class SourceTests(unittest.TestCase):
             "Taucha, Sachsen, Deutschland",
             "Delitzsch, Sachsen, Deutschland",
             "Borna, Sachsen, Deutschland",
+            "Großpösna, Sachsen, Deutschland",
         ):
             with self.subTest(location=location):
-                self.assertTrue(is_leipzig_area(location))
+                self.assertTrue(is_local(location))
         for location in (
             "Stuttgart, Baden-Württemberg, Deutschland",
             "Berlin, Berlin, Deutschland",
@@ -29,7 +30,7 @@ class SourceTests(unittest.TestCase):
             "Remote",
         ):
             with self.subTest(location=location):
-                self.assertFalse(is_leipzig_area(location))
+                self.assertFalse(is_local(location))
 
     def test_normalizes_arbeitnow_job(self):
         raw = {

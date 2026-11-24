@@ -1,0 +1,18 @@
+{
+  "title": "Germany Student Jobs",
+  "subtitle": "Computer-science opportunities across Germany; part-time and minijob listings are restricted to Leipzig and nearby towns.",
+  "city": "Leipzig",
+  "gmail_client_id": "",
+  "categories": [
+    {
+      "id": "cs",
+      "label": "CS & Tech",
+      "scope": "germany"
+    },
+    {
+      "id": "part-time",
+      "label": "Part-time & Minijob · Leipzig area",
+      "scope": "local"
+    }
+  ]
+}

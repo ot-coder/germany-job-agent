@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from jobs_agent.core import Job
-from jobs_agent.publish import publish_jobs, telegram_message
+from jobs_agent.publish import digest_markdown, publish_jobs, telegram_message
 
 
 class PublishTests(unittest.TestCase):
@@ -28,10 +28,13 @@ class PublishTests(unittest.TestCase):
             self.assertEqual([job.id for job in new_jobs], ["new"])
             exported = json.loads((docs / "jobs.json").read_text())
             self.assertEqual({job["id"] for job in exported}, {"old", "new"})
-            html = (docs / "index.html").read_text()
-            self.assertIn("jobs.json", html)
-            self.assertIn("localStorage", html)
-            self.assertIn("Germany Student Jobs", html)
+            for asset in ("index.html", "app.js", "gmail.js", "styles.css", ".nojekyll"):
+                self.assertTrue((docs / asset).exists(), asset)
+            app = (docs / "app.js").read_text()
+            self.assertIn("jobs.json", app)
+            self.assertIn("localStorage", app)
+            config = json.loads((docs / "config.json").read_text())
+            self.assertEqual(config["title"], "Germany Student Jobs")
 
     def test_dashboard_has_switch_for_cs_and_general_part_time_jobs(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -47,13 +50,16 @@ class PublishTests(unittest.TestCase):
 
             exported = json.loads((docs / "jobs.json").read_text())
             self.assertEqual({job["category"] for job in exported}, {"cs", "part-time"})
-            html = (docs / "index.html").read_text()
-            self.assertIn('data-category="cs"', html)
-            self.assertIn('data-category="part-time"', html)
-            self.assertIn("CS & Tech", html)
-            self.assertIn("Part-time & Minijob", html)
-            self.assertIn("Leipzig area", html)
-            self.assertIn("setCategory", html)
+            config = json.loads((docs / "config.json").read_text())
+            self.assertEqual(
+                config["categories"],
+                [
+                    {"id": "cs", "label": "CS & Tech", "scope": "germany"},
+                    {"id": "part-time", "label": "Part-time & Minijob · Leipzig area", "scope": "local"},
+                ],
+            )
+            self.assertIn("data-category", (docs / "app.js").read_text())
+            self.assertNotIn("client_secret", json.dumps(config))
 
     def test_telegram_message_contains_new_roles_and_live_site(self):
         message = telegram_message(
@@ -81,6 +87,20 @@ class PublishTests(unittest.TestCase):
         self.assertIn("No new suitable roles today", message)
         self.assertIn("42 live matches", message)
         self.assertIn("https://example.test", message)
+
+    def test_digest_markdown_groups_by_category_and_neutralises_markup(self):
+        job = self.make_job("x", "Werkstudent <script> @everyone [x](y)")
+        body = digest_markdown([job], "https://example.test/", total_jobs=3)
+        self.assertIn("### CS & Tech", body)
+        self.assertIn("1 new suitable role", body)
+        self.assertNotIn("<script>", body)
+        self.assertNotIn(" @everyone", body)
+        self.assertIn("(https://example.test/x)", body)
+
+    def test_digest_markdown_without_new_jobs(self):
+        body = digest_markdown([], "https://example.test/", total_jobs=0)
+        self.assertIn("no new suitable roles", body)
+        self.assertIn("https://example.test/", body)
 
 
 if __name__ == "__main__":
