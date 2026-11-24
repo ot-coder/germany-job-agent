@@ -1,3 +1,10 @@
+"""Classification and the weighted 0-100 ranking model.
+
+See docs/JOB_SEARCH_STRATEGY.md for why the rules and weights are what they
+are. The role families and search terms themselves are configuration
+(``jobs-agent.toml``; defaults in ``config.py``), so other fields can reuse the
+same model.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -5,68 +12,31 @@ from datetime import datetime, timezone
 import hashlib
 import re
 
+from .config import (
+    BROADER_PROFESSIONAL,
+    BUSINESS_TECH,
+    CORE_TECH,
+    DEFAULT_FAMILIES,
+    DEFAULT_PROFILE,
+    ENTERPRISE_IT,
+    PRODUCT_PROJECT,
+    Category,
+    Family,
+    Profile,
+)
 
-# ---------------------------------------------------------------------------
-# Role families
-#
-# The old model (werkstudent / entry-level / other) was too narrow: it only
-# recognised software-engineering-shaped titles and rejected anything with
-# "manager" in it. The candidate strategy is to use ANY credible early-career
-# professional-technology role as an entry point, not just pure SWE. See
-# docs/JOB_SEARCH_STRATEGY.md for the reasoning behind these families and the
-# scoring model below.
-# ---------------------------------------------------------------------------
-
-CORE_TECH = "CORE_TECH"
-PRODUCT_PROJECT = "PRODUCT_PROJECT"
-BUSINESS_TECH = "BUSINESS_TECH"
-ENTERPRISE_IT = "ENTERPRISE_IT"
-BROADER_PROFESSIONAL = "BROADER_PROFESSIONAL"
 IRRELEVANT = "IRRELEVANT"
 
-# Checked against the TITLE only, in this order. The first family whose any
-# keyword appears in the title wins. Order matters where a title could match
-# more than one family (e.g. "IT Business Analyst" should land in
-# BUSINESS_TECH, not ENTERPRISE_IT, even though "it" appears in both).
-FAMILY_TERMS: dict[str, tuple[str, ...]] = {
-    CORE_TECH: (
-        "software", "developer", "engineer", "backend", "frontend", "front end",
-        "full stack", "fullstack", "data engineer", "data scientist", "data analyst",
-        "machine learning", " ai ", "artificial intelligence", "cloud engineer",
-        "devops", "platform engineer", "site reliability", " sre ", "cybersecurity",
-        "cyber security", "security engineer", "qa engineer", "test automation",
-        "quality assurance", "solutions engineer", "quant", "python", "java developer",
-        "javascript", "typescript", "informatik", "computer science", "web development",
-    ),
-    PRODUCT_PROJECT: (
-        "product manager", "product management", "product analyst", "product operations",
-        "project manager", "project management", "project coordinator", "projektmanage",
-        "projektkoordinat", " pmo ", "digital transformation", "business transformation",
-        "requirements engineer", "process analyst", "scrum master", "agile coach",
-    ),
-    BUSINESS_TECH: (
-        "business analyst", "technology analyst", "technical consultant",
-        "technology consulting", "digital consultant", "it consultant",
-        "junior consultant", "strategy consultant",
-    ),
-    ENTERPRISE_IT: (
-        "service management", "itsm", "service delivery", "it operations",
-        "technical operations", "application support", "application management",
-        "application analyst", "application manager", "systems analyst",
-        "system analyst", "business systems", "enterprise application",
-        "implementation consultant", "implementation specialist",
-        "integration specialist", "saas implementation", " erp ", " crm ",
-        "cloud support", "infrastructure operations", "it governance",
-        "change management", "release management", "incident management",
-        "problem management", "it service",
-    ),
-    BROADER_PROFESSIONAL: (
-        "operations analyst", "business operations", "digital operations",
-        "supply chain", "customer success", "rotational", "graduate programme",
-        "graduate program", "trainee programme", "trainee program",
-    ),
-}
-FAMILY_ORDER = (CORE_TECH, PRODUCT_PROJECT, BUSINESS_TECH, ENTERPRISE_IT, BROADER_PROFESSIONAL)
+# Kept for callers and tests that use the default families directly.
+FAMILY_TERMS: dict[str, tuple[str, ...]] = {f.id: f.keywords for f in DEFAULT_FAMILIES}
+FAMILY_ORDER = tuple(f.id for f in DEFAULT_FAMILIES)
+CORE_TECH_TITLE_HINTS = DEFAULT_FAMILIES[0].title_hints
+
+__all__ = [
+    "BROADER_PROFESSIONAL", "BUSINESS_TECH", "CORE_TECH", "ENTERPRISE_IT", "IRRELEVANT",
+    "PRODUCT_PROJECT", "Job", "classify_role", "classify_level", "match_role",
+    "score_job", "stable_job_id", "plain_text",
+]
 
 # Title-scoped hard rejection. "Manager" alone is deliberately absent here —
 # only unambiguous seniority markers disqualify a role.
@@ -88,6 +58,16 @@ JUNIOR_TERMS = (
 )
 _MODERATE_EXPERIENCE_PATTERN = re.compile(r"\b1\s*[-–to]{1,4}\s*2\s*years?\b|\b2\s*years?\s*(preferred|desired|plus)\b")
 _STRONG_NEGATIVE_TERMS = ("senior leadership", "extensive leadership experience", "people management")
+
+# Role levels, used for a category's ``levels`` filter and the dashboard's
+# "role type" filter. Checked against the title only, in this order.
+_LEVEL_TERMS = (
+    ("werkstudent", ("werkstudent", "working student", "student assistant", "studentische hilfskraft")),
+    ("internship", ("internship", "intern ", "intern)", "praktikum", "praktikant")),
+    ("entry-level", ("junior", "entry level", "entry-level", "graduate", "trainee", "berufseinsteiger", "new grad")),
+    ("minijob", ("minijob", "mini-job", "geringfügig", "556 euro", "520 euro")),
+    ("part-time", ("teilzeit", "part time", "part-time", "aushilfe", "nebenjob", "studentenjob", "student job", "temporary staff")),
+)
 
 GERMANY_LOCATION_TERMS = (
     "germany", "deutschland", "berlin", "munich", "münchen", "munchen", "frankfurt",
@@ -139,13 +119,6 @@ KNOWN_EMPLOYERS: dict[str, str] = {
     "spryker": "Accessible",
 }
 
-# Score weights (see docs/JOB_SEARCH_STRATEGY.md). These sum to 100 and are a
-# ranking heuristic, not a precise probability model.
-_ROLE_FIT_POINTS = {
-    CORE_TECH: 20, PRODUCT_PROJECT: 18, BUSINESS_TECH: 17,
-    ENTERPRISE_IT: 17, BROADER_PROFESSIONAL: 14,
-}
-
 
 @dataclass(slots=True)
 class Job:
@@ -156,7 +129,9 @@ class Job:
     url: str
     description: str
     source: str
+    category: str = ""
     role_family: str = ""
+    role_type: str = "regular"
     seniority: str = "neutral"
     employer_category: str = "Core"
     language_requirement: str = "open"
@@ -165,6 +140,20 @@ class Job:
     score: int = 0
     reasons: list[str] = field(default_factory=list)
     first_seen_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+@dataclass(frozen=True, slots=True)
+class RoleMatch:
+    category: Category | None
+    family: Family | None
+    role_type: str
+    seniority: str
+
+    @property
+    def family_id(self) -> str:
+        if self.category is None:
+            return IRRELEVANT
+        return self.family.id if self.family else self.category.id
 
 
 def _normalized(value: str) -> str:
@@ -182,41 +171,60 @@ def _is_senior_title(title_text: str) -> bool:
     return any(int(match) >= 3 for match in _YEARS_PATTERN.findall(title_text))
 
 
-def _match_family(text: str) -> str | None:
-    for family in FAMILY_ORDER:
-        if any(term in text for term in FAMILY_TERMS[family]):
+def classify_level(title: str) -> str:
+    """werkstudent / internship / entry-level / minijob / part-time / regular / senior."""
+    title_text = f" {_normalized(title)} "
+    if _is_senior_title(title_text):
+        return "senior"
+    for level, terms in _LEVEL_TERMS:
+        if any(term in title_text for term in terms):
+            return level
+    return "regular"
+
+
+def _level_allowed(category: Category, role_type: str) -> bool:
+    return "any" in category.levels or role_type in category.levels
+
+
+def _match_family(families: tuple[Family, ...], title_text: str, combined: str) -> Family | None:
+    for family in families:
+        if any(term in title_text for term in family.keywords):
             return family
+    # Description fallback, used ONLY when the title carries its own weak hint.
+    # Matching family keywords against descriptions alone produced false
+    # positives (a Sales Account Executive at an "AI-native" company became
+    # CORE_TECH), so the title has to point that way first.
+    for family in families:
+        if family.title_hints and any(hint in title_text for hint in family.title_hints):
+            if any(term in combined for term in family.keywords):
+                return family
     return None
 
 
-# Two-factor description fallback used ONLY when the title alone doesn't
-# identify a family (e.g. "Werkstudent Data"). Matching the full family
-# keyword lists against free-text descriptions ALONE produced false
-# positives in practice — e.g. a Sales Account Executive at an "AI-native"
-# company got classified CORE_TECH purely because "AI" appears in every
-# modern SaaS company's About-Us boilerplate, regardless of the actual role.
-# The title must first carry its own weak tech-adjacent hint before the
-# (much richer, otherwise-risky) CORE_TECH description terms are trusted.
-CORE_TECH_TITLE_HINTS = (
-    " data ", " digital ", " tech ", " it ", " ki ", " cloud ", " cyber ",
-    " system ", " systems ", " analytics ", " platform ",
-)
-
-
-def classify_role(title: str, description: str = "") -> tuple[str, str]:
-    """Returns (role_family, seniority). seniority is 'senior', 'junior', or 'neutral'."""
+def match_role(title: str, description: str = "", profile: Profile = DEFAULT_PROFILE) -> RoleMatch:
+    """Find the first category (and family within it) that this role belongs to."""
     title_text = f" {_normalized(title)} "
     if _is_senior_title(title_text):
-        return IRRELEVANT, "senior"
-    description_text = f" {_normalized(description)} "
-    combined = f"{title_text}{description_text}"
-    role_family = _match_family(title_text)
-    if role_family is None and any(hint in title_text for hint in CORE_TECH_TITLE_HINTS):
-        if any(term in combined for term in FAMILY_TERMS[CORE_TECH]):
-            role_family = CORE_TECH
-    role_family = role_family or IRRELEVANT
+        return RoleMatch(None, None, "senior", "senior")
+    combined = f"{title_text}{_normalized(description)} "
     seniority = "junior" if any(term in combined for term in JUNIOR_TERMS) else "neutral"
-    return role_family, seniority
+    role_type = classify_level(title)
+    for category in profile.categories:
+        if not _level_allowed(category, role_type):
+            continue
+        families = category.role_families()
+        if not families:
+            return RoleMatch(category, None, role_type, seniority)
+        family = _match_family(families, title_text, combined)
+        if family is not None:
+            return RoleMatch(category, family, role_type, seniority)
+    return RoleMatch(None, None, role_type, seniority)
+
+
+def classify_role(title: str, description: str = "", profile: Profile = DEFAULT_PROFILE) -> tuple[str, str]:
+    """Returns (role_family, seniority). seniority is 'senior', 'junior', or 'neutral'."""
+    match = match_role(title, description, profile)
+    return match.family_id, match.seniority
 
 
 def classify_employer(company: str) -> str:
@@ -242,7 +250,7 @@ def _eligibility_score(text: str) -> tuple[int, str]:
     return 9, "Experience level not clearly stated"
 
 
-def _realism_score(role_family: str, employer_category: str, seniority: str) -> tuple[int, str]:
+def _realism_score(realism_bonus: int, employer_category: str, seniority: str) -> tuple[int, str]:
     base = 10
     if employer_category == "Reach":
         reason = "Highly selective employer — realistic odds are lower"
@@ -252,15 +260,15 @@ def _realism_score(role_family: str, employer_category: str, seniority: str) -> 
         base += 3
     else:
         reason = "Moderate competitiveness expected"
-    if role_family in (ENTERPRISE_IT, BUSINESS_TECH, BROADER_PROFESSIONAL, PRODUCT_PROJECT):
-        base += 2
+    base += realism_bonus
     if seniority == "junior":
         base += 2
     return max(0, min(15, base)), reason
 
 
-def _location_score(location_text: str, remote: bool) -> tuple[int, str]:
-    if any(term in location_text for term in GERMANY_LOCATION_TERMS):
+def _location_score(location_text: str, remote: bool, profile: Profile) -> tuple[int, str]:
+    home = (profile.city.casefold(),) if profile.city else ()
+    if any(term in location_text for term in GERMANY_LOCATION_TERMS + home):
         return 10, "Located in Germany"
     if remote or "remote" in location_text:
         return 6, "Remote role — Germany eligibility unclear"
@@ -281,9 +289,10 @@ def _language_score(text: str) -> tuple[int, str, str]:
     return 9, "No strict German requirement detected", "open"
 
 
-def _skills_score(role_family: str, text: str) -> tuple[int, str, str]:
-    terms = FAMILY_TERMS.get(role_family, ())
-    hits = sum(1 for term in terms if term in text)
+def _skills_score(family: Family | None, text: str) -> tuple[int, str, str]:
+    if family is None:  # "any title" category, e.g. local part-time work
+        return 6, "Matches your local search", "some"
+    hits = sum(1 for term in family.keywords if term in text)
     if hits >= 2:
         return 10, "Strong keyword relevance to role family", "strong"
     if hits == 1:
@@ -329,33 +338,39 @@ def _recency_score(published_at: str) -> tuple[int, str]:
     return 1, "Posted over a month ago"
 
 
-def score_job(job: Job) -> tuple[int, list[str]]:
-    """Scores a job 0-100 and returns (score, reasons). Also fills in
-    job.role_family, job.seniority, job.employer_category, and
-    job.language_requirement as a side effect, matching the source
-    normalizers' existing `job.score, job.reasons = score_job(job)` pattern.
+def score_job(job: Job, profile: Profile = DEFAULT_PROFILE) -> tuple[int, list[str]]:
+    """Scores a job 0-100 and returns (score, reasons).
+
+    Also fills in job.category, job.role_family, job.role_type, job.seniority,
+    job.employer_category and job.language_requirement as a side effect,
+    matching the normalizers' ``job.score, job.reasons = score_job(job)`` pattern.
     """
-    role_family, seniority = classify_role(job.title, job.description)
-    job.role_family = role_family
-    job.seniority = seniority
-    if role_family == IRRELEVANT:
-        job.employer_category = classify_employer(job.company)
-        return 0, ["Senior-level or out-of-scope role"]
+    match = match_role(job.title, job.description, profile)
+    job.category = match.category.id if match.category else "other"
+    job.role_family = match.family_id
+    job.role_type = match.role_type
+    job.seniority = match.seniority
+    job.employer_category = classify_employer(job.company)
+    if match.category is None:
+        if match.seniority == "senior":
+            return 0, ["Senior-level or out-of-scope role"]
+        return 0, ["Outside your configured search"]
 
     title_text = f" {_normalized(job.title)} "
     text = f"{title_text} {_normalized(job.description)} "
     location_text = f" {_normalized(job.location)} "
-    employer_category = classify_employer(job.company)
-    job.employer_category = employer_category
+    family = match.family
 
-    role_fit_points = _ROLE_FIT_POINTS[role_family]
-    role_fit_reason = f"Credible {role_family.replace('_', ' ').title()} entry point"
+    role_fit_points = family.points if family else 20
+    role_fit_reason = f"Credible {family.label if family else match.category.label} entry point"
     eligibility_points, eligibility_reason = _eligibility_score(text)
-    realism_points, realism_reason = _realism_score(role_family, employer_category, seniority)
-    location_points, location_reason = _location_score(location_text, job.remote)
+    realism_points, realism_reason = _realism_score(
+        family.realism_bonus if family else 0, job.employer_category, match.seniority
+    )
+    location_points, location_reason = _location_score(location_text, job.remote, profile)
     language_points, language_reason, language_label = _language_score(text)
     job.language_requirement = language_label
-    skills_points, skills_reason, skills_label = _skills_score(role_family, text)
+    skills_points, skills_reason, skills_label = _skills_score(family, text)
     career_points, career_reason, career_label = _career_value_score(text)
     recency_points, recency_reason = _recency_score(job.published_at)
 

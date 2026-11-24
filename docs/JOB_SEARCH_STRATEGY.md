@@ -7,6 +7,14 @@ the rules below, and a change that looks like a bug fix in isolation can
 silently break the strategy (e.g. "manager" filtering, German-language
 tolerance, or the Telegram anti-spam cap).
 
+> **Where things live now.** The role families, their keywords and weights,
+> the Bundesagentur queries and the thresholds (`min_score` 65,
+> `notify_min_score` 75, `notify_limit` 5) are configuration in
+> [`jobs-agent.toml`](../jobs-agent.toml); `jobs_agent/config.py` holds the
+> same values as `DEFAULT_PROFILE`. The scoring components and the seniority
+> rules are still code in `jobs_agent/core.py`. The anti-spam rules apply to
+> both Telegram and the daily GitHub digest issue.
+
 ## Candidate context
 
 - Computer Science student, Lancaster University Leipzig.

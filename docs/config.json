@@ -1,0 +1,36 @@
+{
+  "title": "Germany CS Jobs",
+  "subtitle": "Live Werkstudent and entry-level technology roles, ranked for computer-science students in Germany.",
+  "city": "Leipzig",
+  "gmail_client_id": "",
+  "categories": [
+    {
+      "id": "tech",
+      "label": "Tech & adjacent roles",
+      "scope": "germany",
+      "families": [
+        {
+          "id": "CORE_TECH",
+          "label": "Core Tech"
+        },
+        {
+          "id": "PRODUCT_PROJECT",
+          "label": "Product & Project"
+        },
+        {
+          "id": "BUSINESS_TECH",
+          "label": "Business & Tech"
+        },
+        {
+          "id": "ENTERPRISE_IT",
+          "label": "Enterprise IT"
+        },
+        {
+          "id": "BROADER_PROFESSIONAL",
+          "label": "Broader Professional"
+        }
+      ]
+    }
+  ],
+  "generated_at": "2026-11-24T18:43:11+00:00"
+}

@@ -1,30 +1,122 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Germany Student Jobs Agent</title><style>
-:root{color-scheme:dark;--bg:#080c13;--card:#111925;--muted:#94a3b8;--line:#263349;--accent:#5eead4;--blue:#60a5fa}*{box-sizing:border-box}
-body{margin:0;background:radial-gradient(circle at 15% 0,#10243b,#080c13 46%);color:#e8eef7;font:15px system-ui,-apple-system,sans-serif;min-height:100vh}
-main{max-width:1200px;margin:auto;padding:42px 22px 70px}.top{display:flex;justify-content:space-between;align-items:end;gap:20px;flex-wrap:wrap}
-h1{font-size:clamp(34px,6vw,62px);line-height:.95;margin:0;letter-spacing:-.04em}.sub{color:var(--muted);max-width:650px}.updated{color:var(--muted);font-size:12px}
-.controls{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;margin:14px 0}input,select{background:#111925;border:1px solid var(--line);border-radius:12px;color:#e8eef7;padding:12px 14px;font:inherit}
-.tabs{display:flex;gap:8px;margin-top:28px;flex-wrap:wrap}.tab{font-weight:750;padding:11px 16px}.tab.active{background:#0f766e;border-color:#2dd4bf;color:#fff}
-.stats{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px}.pill{border:1px solid var(--line);background:#0f1723;padding:7px 11px;border-radius:999px;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:15px}.card{background:#111925ed;border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 14px 38px #0005;transition:.18s}.card:hover{transform:translateY(-2px);border-color:#405575}
-.row{display:flex;justify-content:space-between;gap:15px}.title{font-size:20px;font-weight:780;text-decoration:none;color:#f3f7fc}.company{color:var(--accent);font-weight:700;margin-top:5px}.score{font-size:29px;font-weight:850;color:var(--accent)}
-.meta,.reasons{color:var(--muted);font-size:13px;line-height:1.5}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}button,.button{background:#172337;color:#e8eef7;border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;text-decoration:none}button:hover,.button:hover{border-color:var(--blue)}button.active{background:#0f766e;border-color:#2dd4bf}.empty{padding:60px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:18px}@media(max-width:650px){.controls{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
-</style></head><body><main>
-<div class="top"><div><h1>Germany CS Jobs</h1><p class="sub">Live Werkstudent and entry-level technology roles, ranked for computer-science students in Germany.</p></div><div class="updated" id="updated"></div></div>
-<div class="controls"><input id="search" type="search" placeholder="Search title, company, city…"><select id="type"><option value="">All role families</option><option value="CORE_TECH">Core Tech</option><option value="PRODUCT_PROJECT">Product &amp; Project</option><option value="BUSINESS_TECH">Business &amp; Tech</option><option value="ENTERPRISE_IT">Enterprise IT</option><option value="BROADER_PROFESSIONAL">Broader Professional</option></select><select id="status"><option value="">All statuses</option><option value="new">New</option><option value="saved">Saved</option><option value="applied">Applied</option><option value="dismissed">Dismissed</option></select></div>
-<div class="stats" id="stats"></div><section class="grid" id="jobs"><div class="empty">Loading live roles…</div></section>
-</main><script>
-const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const getState=id=>localStorage.getItem('job:'+id)||'new';
-function setState(id,state){localStorage.setItem('job:'+id,state);render()}
-let all=[],activeCategory='cs';
-function setCategory(category){activeCategory=category;document.querySelector('#type').value='';document.querySelectorAll('.tab').forEach(button=>button.classList.toggle('active',button.dataset.category===category));render()}
-function render(){const q=document.querySelector('#search').value.toLowerCase(),type=document.querySelector('#type').value,status=document.querySelector('#status').value;
- const rows=all.filter(j=>(!q||`${j.title} ${j.company} ${j.location}`.toLowerCase().includes(q))&&(!type||j.role_family===type)&&(!status||getState(j.id)===status));
- document.querySelector('#stats').innerHTML=`<span class="pill">${rows.length} shown</span><span class="pill">${all.length} live matches</span><span class="pill">${all.filter(j=>getState(j.id)==='saved').length} saved</span><span class="pill">${all.filter(j=>getState(j.id)==='applied').length} applied</span>`;
- document.querySelector('#jobs').innerHTML=rows.length?rows.map(j=>{const st=getState(j.id);return `<article class="card"><div class="row"><div><a class="title" href="${esc(j.url)}" target="_blank" rel="noreferrer">${esc(j.title)}</a><div class="company">${esc(j.company)}</div></div><div class="score">${j.score}</div></div><p class="meta">${esc(j.location)} · ${esc(j.role_family)} · ${esc(j.source)} · ${esc(st)}</p><p class="reasons">${j.reasons.map(esc).join(' · ')}</p><div class="actions">${['saved','applied','dismissed'].map(s=>`<button class="${st===s?'active':''}" onclick="setState('${esc(j.id)}','${s}')">${s[0].toUpperCase()+s.slice(1)}</button>`).join('')}<a class="button" href="${esc(j.url)}" target="_blank" rel="noreferrer">Apply ↗</a></div></article>`}).join(''):'<div class="empty">No jobs match these filters.</div>'}
-for(const id of ['search','type','status'])document.querySelector('#'+id).addEventListener(id==='search'?'input':'change',render);
-fetch('./jobs.json?'+Date.now()).then(r=>r.json()).then(data=>{all=data.sort((a,b)=>b.score-a.score);document.querySelector('#updated').textContent=`Updated ${new Date(document.lastModified).toLocaleString()}`;render()}).catch(()=>document.querySelector('#jobs').innerHTML='<div class="empty">Could not load jobs. Please refresh.</div>');
-</script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Germany Job Agent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M9 13h14v11H9z M13 13v-3h6v3' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1 id="title">Germany Job Agent</h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <div class="top-side">
+      <span class="updated" id="updated"></span>
+      <button type="button" data-action="open-settings" aria-label="Settings and backup">⚙ Settings</button>
+    </div>
+  </header>
+
+  <nav class="views" aria-label="Views">
+    <a href="#jobs" class="view-link" data-view="jobs">Jobs <span class="count" id="jobs-count"></span></a>
+    <a href="#tracker" class="view-link" data-view="tracker">My applications <span class="count" id="tracker-count"></span></a>
+  </nav>
+
+  <div id="prompt" class="prompt" hidden></div>
+
+  <section id="view-jobs" class="view" aria-label="Job listings">
+    <div class="tabs" id="category-tabs" role="tablist"></div>
+    <div class="controls">
+      <input id="job-search" type="search" placeholder="Search title, company, city…" aria-label="Search jobs">
+      <select id="job-type" aria-label="Role type">
+        <option value="">All role types</option>
+      </select>
+      <select id="job-status" aria-label="Status">
+        <option value="">All except dismissed</option>
+        <option value="new">New</option>
+        <option value="saved">Saved</option>
+        <option value="applied">Applied</option>
+        <option value="dismissed">Dismissed</option>
+      </select>
+    </div>
+    <div class="stats" id="job-stats"></div>
+    <div class="grid" id="jobs"><div class="empty">Loading live roles…</div></div>
+  </section>
+
+  <section id="view-tracker" class="view" aria-label="Application tracker" hidden>
+    <div class="tiles" id="tracker-tiles"></div>
+    <div id="followups"></div>
+    <div class="controls tracker-controls">
+      <input id="app-search" type="search" placeholder="Search company, position, notes…" aria-label="Search applications">
+      <button type="button" class="primary" data-action="add-app">+ Add application</button>
+    </div>
+    <div class="chips" id="status-chips" role="tablist"></div>
+    <div class="list" id="applications"></div>
+  </section>
+
+  <footer class="foot">
+    Your saved jobs and applications stay in this browser and are never uploaded anywhere.
+    Use <button type="button" class="link" data-action="open-settings">Settings → Export</button> to back them up.
+    · <a href="https://github.com/ot-coder/germany-job-agent" target="_blank" rel="noreferrer">Get your own copy</a>
+  </footer>
+</main>
+
+<dialog id="app-dialog">
+  <form id="app-form" method="dialog">
+    <h2 id="app-dialog-title">Add application</h2>
+    <input type="hidden" name="id">
+    <label>Company<input name="company" required maxlength="200"></label>
+    <label>Position<input name="position" required maxlength="200"></label>
+    <div class="two">
+      <label>Applied on<input name="applicationDate" type="date" required></label>
+      <label>Status<select name="status"></select></label>
+    </div>
+    <label>Location<input name="location" maxlength="200"></label>
+    <label>Posting link<input name="url" type="url" placeholder="https://…" maxlength="2000"></label>
+    <label>Notes<textarea name="notes" rows="3" maxlength="5000"></textarea></label>
+    <div class="dialog-actions">
+      <button type="button" class="danger" data-action="delete-app" id="delete-app">Delete</button>
+      <span class="spacer"></span>
+      <button type="button" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settings-dialog">
+  <div class="settings">
+    <h2>Settings</h2>
+
+    <h3>Backup</h3>
+    <p class="hint">Everything is stored only in this browser. Export a backup now and then, or to move to another device.</p>
+    <div class="row-actions">
+      <button type="button" data-action="export">Export backup</button>
+      <label class="button">Import backup or old tracker data<input type="file" id="import-file" accept="application/json,.json" hidden></label>
+    </div>
+
+    <h3>Gmail auto-detection <span class="tag">optional</span></h3>
+    <p class="hint">Scans recent emails <em>in your browser</em> for application confirmations and adds them to your tracker.
+      Needs your own free Google OAuth client ID —
+      <a href="https://github.com/ot-coder/germany-job-agent/blob/main/guides/gmail.md" target="_blank" rel="noreferrer">5-minute guide</a>.</p>
+    <label>OAuth client ID<input id="gmail-client-id" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off"></label>
+    <div class="row-actions">
+      <label class="inline">Look back <input id="gmail-days" type="number" min="1" max="365" value="30"> days</label>
+      <button type="button" class="primary" data-action="gmail-scan">Scan Gmail</button>
+    </div>
+    <p class="hint" id="gmail-status" aria-live="polite"></p>
+
+    <h3>Reset</h3>
+    <div class="row-actions">
+      <button type="button" class="danger" data-action="erase">Erase all data in this browser</button>
+    </div>
+    <div class="dialog-actions"><span class="spacer"></span><button type="button" data-action="close-dialog">Close</button></div>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

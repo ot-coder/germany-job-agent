@@ -4,7 +4,10 @@ import unittest
 from pathlib import Path
 
 from jobs_agent.core import Job
-from jobs_agent.publish import notify_tier, publish_jobs, telegram_message
+from dataclasses import replace
+
+from jobs_agent.config import DEFAULT_PROFILE, Category
+from jobs_agent.publish import digest_markdown, notify_tier, publish_jobs, telegram_message
 
 
 class PublishTests(unittest.TestCase):
@@ -28,11 +31,19 @@ class PublishTests(unittest.TestCase):
             self.assertEqual([job.id for job in new_jobs], ["new"])
             exported = json.loads((docs / "jobs.json").read_text())
             self.assertEqual({job["id"] for job in exported}, {"old", "new"})
-            html = (docs / "index.html").read_text()
-            self.assertIn("jobs.json", html)
-            self.assertIn("localStorage", html)
-            self.assertIn("Germany CS Jobs", html)
-            self.assertIn("role_family", html)
+            for asset in ("index.html", "app.js", "gmail.js", "styles.css", ".nojekyll"):
+                self.assertTrue((docs / asset).exists(), asset)
+            app = (docs / "app.js").read_text()
+            self.assertIn("jobs.json", app)
+            self.assertIn("localStorage", app)
+            self.assertIn("role_family", app)
+            config = json.loads((docs / "config.json").read_text())
+            self.assertEqual(config["title"], "Germany CS Jobs")
+            self.assertEqual(
+                [f["id"] for f in config["categories"][0]["families"]],
+                ["CORE_TECH", "PRODUCT_PROJECT", "BUSINESS_TECH", "ENTERPRISE_IT", "BROADER_PROFESSIONAL"],
+            )
+            self.assertNotIn("client_secret", json.dumps(config))
 
     def test_jobs_omitted_by_telegram_cap_do_not_reappear_as_new_next_run(self):
         # Day 1: 20 new jobs discovered, only 5 fit the Telegram cap. All 20
@@ -141,9 +152,57 @@ class TelegramMessageTests(unittest.TestCase):
         )
         self.assertIn("Acme", message)
         self.assertIn("Berlin, Germany", message)
-        self.assertIn("CORE_TECH", message)
+        self.assertIn("Core Tech", message)  # family label from the profile
         self.assertIn("Why:", message)
         self.assertIn("https://example.test/x", message)
+
+
+
+class DigestTests(unittest.TestCase):
+    def make_job(self, job_id: str, title: str, score: int, category: str = "tech") -> Job:
+        return Job(
+            id=job_id, title=title, company="Acme", location="Berlin, Germany",
+            url=f"https://example.test/{job_id}", description="Python", source="fixture",
+            category=category, role_family="CORE_TECH", score=score,
+            reasons=["Credible Core Tech entry point", "Clear entry-level/student framing"],
+        )
+
+    def test_digest_follows_telegram_anti_spam_rules(self):
+        jobs = [self.make_job(f"j{i}", f"Role {i}", score=99 - i) for i in range(8)]
+        jobs.append(self.make_job("quiet", "Quiet Role", 70))
+        body = digest_markdown(jobs, 20, 1, 9, "https://example.test/", total_jobs=40)
+        self.assertIn("5 new suitable roles", body)
+        self.assertIn("EXCEPTIONAL", body)
+        self.assertNotIn("Role 5", body)
+        self.assertNotIn("Quiet Role", body)
+        self.assertIn("4 more new matches below the alert threshold", body)
+        self.assertIn("40", body)
+
+    def test_digest_is_empty_when_nothing_clears_the_threshold(self):
+        self.assertEqual(digest_markdown([self.make_job("a", "Meh", 70)], 5, 0, 1, "https://e/"), "")
+        self.assertEqual(digest_markdown([], 0, 0, 0, "https://e/"), "")
+
+    def test_digest_neutralises_markup_and_mentions(self):
+        job = self.make_job("x", "Werkstudent <script> @everyone [x](y)", 91)
+        body = digest_markdown([job], 1, 0, 1, "https://example.test/")
+        self.assertNotIn("<script>", body)
+        self.assertNotIn(" @everyone", body)
+        self.assertIn("(https://example.test/x)", body)
+
+    def test_digest_names_the_category_when_there_are_several(self):
+        profile = replace(DEFAULT_PROFILE, categories=DEFAULT_PROFILE.categories + (
+            Category(id="part-time", label="Part-time & Minijob", scope="local", queries=("minijob",)),
+        ))
+        body = digest_markdown([self.make_job("x", "Werkstudent IT", 90)], 1, 0, 1, "https://e/", profile=profile)
+        self.assertIn("Tech & adjacent roles · Core Tech", body)
+
+    def test_profile_threshold_and_limit_are_respected(self):
+        profile = replace(DEFAULT_PROFILE, notify_min_score=60, notify_limit=2)
+        jobs = [self.make_job(f"j{i}", f"Role {i}", score=70 - i) for i in range(4)]
+        message = telegram_message(jobs, 4, 0, 4, "https://e/", profile=profile)
+        self.assertIn("2 new suitable roles", message)
+        self.assertIn("Role 1", message)
+        self.assertNotIn("Role 2", message)
 
 
 if __name__ == "__main__":
