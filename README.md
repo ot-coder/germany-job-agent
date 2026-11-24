@@ -7,7 +7,7 @@ Find jobs in Germany for **your field and your city**, get a **daily digest** on
 - **Application tracker.** Press **Applied** on a listing, or answer *“Did you apply?”* when you come back from a posting, and it lands in *My applications* with status, notes, follow-up reminders and stats. Gmail auto-detection is optional.
 - **Your data stays yours.** The job feed is public listings. Everything you save, apply to or write is stored only in your browser. There is no server and no database, and nothing is collected.
 
-Live example: **https://ot-coder.github.io/germany-job-agent/**: the author's own search for early-career technology and technology-adjacent roles across Germany ([why it is set up this way](docs/JOB_SEARCH_STRATEGY.md)).
+Live example: **https://ot-coder.github.io/germany-job-agent/**: the author's own search for early-career technology and technology-adjacent roles across Germany ([how it ranks](guides/ranking.md)).
 
 ## Get your own in 5 minutes
 
@@ -78,7 +78,7 @@ realism_bonus = 2          # small boost for realistic entry points
 keywords = ["product manager", "project coordinator", "scrum master"]
 ```
 
-**How the score works.** Every job gets up to 20 points for role fit, 20 for experience level (Werkstudent/junior wording scores high; "5+ years" scores low), 15 for realism, 10 each for location, German-language requirement, keyword relevance and career value, and 5 for recency. Senior, lead, head-of and director titles are always filtered out, but "manager" on its own is not. The reasoning is in [docs/JOB_SEARCH_STRATEGY.md](docs/JOB_SEARCH_STRATEGY.md).
+**How the score works.** Every job gets up to 20 points for role fit, 20 for experience level (Werkstudent/junior wording scores high; "5+ years" scores low), 15 for realism, 10 each for location, German-language requirement, keyword relevance and career value, and 5 for recency. Senior, lead, head-of and director titles are always filtered out, but "manager" on its own is not. The reasoning is in [guides/ranking.md](guides/ranking.md).
 
 **Job sources:** two of the three sources (Bundesagentur für Arbeit and Arbeitnow) only cover Germany.
 

@@ -3,7 +3,7 @@
 Everything personal lives in ``jobs-agent.toml`` at the repository root. When the
 file is missing, ``DEFAULT_PROFILE`` is used: early-career technology and
 technology-adjacent roles across Germany, ranked with the weighted model in
-``core.py`` (see docs/JOB_SEARCH_STRATEGY.md). It doubles as a worked example.
+``core.py`` (see guides/ranking.md). It doubles as a worked example.
 """
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ class Category:
 class Profile:
     title: str = "Germany Job Agent"
     subtitle: str = ""
-    city: str = "Leipzig"
+    city: str = ""
     radius_km: int = 35
     nearby_towns: tuple[str, ...] = ()
     min_score: int = 65
@@ -144,7 +144,7 @@ DEFAULT_FAMILIES = (
             "javascript", "typescript", "informatik", "computer science", "web development",
         ),
         # Title must carry one of these before description text may promote it
-        # into CORE_TECH (see "title-first" in docs/JOB_SEARCH_STRATEGY.md).
+        # into CORE_TECH (see "title-first" in guides/ranking.md).
         title_hints=(
             " data ", " digital ", " tech ", " it ", " ki ", " cloud ", " cyber ",
             " system ", " systems ", " analytics ", " platform ",
@@ -215,7 +215,7 @@ DEFAULT_PROFILE = Profile(
         "Live Werkstudent and entry-level technology roles, ranked for "
         "computer-science students in Germany."
     ),
-    city="Leipzig",
+    city="",
     radius_km=35,
     min_score=65,
     notify_min_score=75,
@@ -322,10 +322,13 @@ def parse_config(data: dict) -> Profile:
         ))
 
     defaults = Profile()
+    city = str(raw_profile.get("city", defaults.city)).strip()
+    if not city and any(c.scope == "local" for c in categories):
+        raise ConfigError('[profile] city is required when a category has scope = "local"')
     return Profile(
         title=str(raw_profile.get("title", defaults.title)),
         subtitle=str(raw_profile.get("subtitle", "")),
-        city=str(raw_profile.get("city", defaults.city)).strip(),
+        city=city,
         radius_km=_int(raw_profile.get("radius_km", defaults.radius_km), "radius_km", 0, 200),
         nearby_towns=tuple(t.casefold() for t in _strings(raw_profile.get("nearby_towns"), "nearby_towns")),
         min_score=_int(raw_profile.get("min_score", defaults.min_score), "min_score", 0, 100),

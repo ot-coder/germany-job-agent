@@ -52,7 +52,7 @@ def publish_jobs(
 
 def notify_tier(score: int) -> tuple[str, str]:
     """Maps a score to (tier, emoji). Thresholds are a ranking convenience,
-    not a scientific probability — see docs/JOB_SEARCH_STRATEGY.md."""
+    not a scientific probability — see guides/ranking.md."""
     if score >= 90:
         return "EXCEPTIONAL", "🌟"
     if score >= 82:

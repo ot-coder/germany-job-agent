@@ -19,6 +19,7 @@ LEIPZIG_TOWNS = ("markkleeberg", "schkeuditz", "taucha", "delitzsch", "borna", "
 # The default (author's) profile plus a local part-time tab, as the setup form writes it.
 WITH_PART_TIME = replace(
     DEFAULT_PROFILE,
+    city="Leipzig",
     categories=DEFAULT_PROFILE.categories + (Category(
         id="part-time", label="Part-time & Minijob", scope="local",
         levels=tuple(PART_TIME_LEVELS), queries=tuple(PART_TIME_QUERIES),
