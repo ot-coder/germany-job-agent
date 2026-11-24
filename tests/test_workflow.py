@@ -79,6 +79,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("workflow_call:", refresh)
         self.assertLess(refresh.index("uses: actions/upload-pages-artifact"), refresh.index("uses: actions/deploy-pages"))
 
+    def test_deploy_runs_in_its_own_job_after_the_upload(self):
+        refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
+        refresh_job = refresh[refresh.index("\n  refresh:"):refresh.index("\n  deploy:")]
+        deploy_job = refresh[refresh.index("\n  deploy:"):]
+        # actions/deploy-pages#451: deploying right after the upload in the same job can find 0 artifacts.
+        self.assertIn("uses: actions/upload-pages-artifact", refresh_job)
+        self.assertNotIn("uses: actions/deploy-pages", refresh_job)
+        self.assertNotIn("environment:", refresh_job)
+        self.assertIn("run: ${{ steps.ready.outputs.run }}", refresh_job)
+        for line in ("needs: refresh", "if: needs.refresh.outputs.run == 'true'", "runs-on: ubuntu-latest",
+                     "pages: write", "id-token: write", "name: github-pages",
+                     "url: ${{ steps.deployment.outputs.page_url }}", "id: deployment", "uses: actions/deploy-pages@v5"):
+            self.assertIn(line, deploy_job)
+        self.assertEqual(deploy_job.count("- name:") + deploy_job.count("- uses:"), 1)  # its only step
+
     def test_called_refresh_builds_the_config_setup_just_pushed(self):
         refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
         self.assertIn("ref: ${{ github.ref }}", refresh)
