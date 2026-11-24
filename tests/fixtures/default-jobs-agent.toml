@@ -1,0 +1,198 @@
+# Germany Job Agent configuration.
+# Re-run the "Set up my job agent" workflow, or edit this file by hand.
+# Reference: https://github.com/ot-coder/germany-job-agent#configuration
+#
+# This copy is the project author's search: early-career technology and
+# technology-adjacent roles across Germany. How it ranks: guides/ranking.md
+
+[profile]
+title = "Germany CS Jobs"
+subtitle = "Live Werkstudent and entry-level technology roles, ranked for computer-science students in Germany."
+# Only needed for "local" categories.
+city = ""
+radius_km = 35
+nearby_towns = []
+# 0-100. Jobs below min_score are hidden; new jobs at notify_min_score or above
+# (at most notify_limit per day) are sent as your daily notification.
+min_score = 65
+notify_min_score = 75
+notify_limit = 5
+include_remote = true
+# Optional: your own Google OAuth client ID for Gmail auto-detection (see guides/gmail.md).
+gmail_client_id = ""
+
+[[categories]]
+id = "tech"
+label = "Tech & adjacent roles"
+scope = "germany"
+# "any" = every non-senior role. Senior/lead/head-of titles are always rejected.
+levels = ["any"]
+# Searches sent to the Bundesagentur für Arbeit job board.
+queries = [
+    "werkstudent informatik",
+    "werkstudent software",
+    "werkstudent softwareentwicklung",
+    "werkstudent data",
+    "werkstudent machine learning",
+    "werkstudent IT",
+    "junior softwareentwickler",
+    "junior developer",
+    "graduate software engineer",
+    "junior data analyst",
+    "junior data engineer",
+    "junior devops",
+    "junior cybersecurity",
+    "werkstudent projektmanagement",
+    "junior projektmanager",
+    "product management intern",
+    "junior product manager",
+    "projektkoordinator IT",
+    "PMO werkstudent",
+    "werkstudent business analyst",
+    "junior business analyst",
+    "IT consultant berufseinsteiger",
+    "werkstudent IT service management",
+    "junior application manager",
+    "application support junior",
+    "junior system analyst",
+    "implementation consultant junior",
+]
+
+# Role families are checked against the job title, in this order; the first match wins.
+# points = role-fit share of the 100-point score (max 20).
+
+[[categories.families]]
+id = "CORE_TECH"
+label = "Core Tech"
+points = 20
+# A title with one of these hints joins this family if the description confirms it.
+title_hints = [" data ", " digital ", " tech ", " it ", " ki ", " cloud ", " cyber ", " system ", " systems ", " analytics ", " platform "]
+keywords = [
+    "software",
+    "developer",
+    "engineer",
+    "backend",
+    "frontend",
+    "front end",
+    "full stack",
+    "fullstack",
+    "data engineer",
+    "data scientist",
+    "data analyst",
+    "machine learning",
+    " ai ",
+    "artificial intelligence",
+    "cloud engineer",
+    "devops",
+    "platform engineer",
+    "site reliability",
+    " sre ",
+    "cybersecurity",
+    "cyber security",
+    "security engineer",
+    "qa engineer",
+    "test automation",
+    "quality assurance",
+    "solutions engineer",
+    "quant",
+    "python",
+    "java developer",
+    "javascript",
+    "typescript",
+    "informatik",
+    "computer science",
+    "web development",
+]
+
+[[categories.families]]
+id = "PRODUCT_PROJECT"
+label = "Product & Project"
+points = 18
+realism_bonus = 2
+keywords = [
+    "product manager",
+    "product management",
+    "product analyst",
+    "product operations",
+    "project manager",
+    "project management",
+    "project coordinator",
+    "projektmanage",
+    "projektkoordinat",
+    " pmo ",
+    "digital transformation",
+    "business transformation",
+    "requirements engineer",
+    "process analyst",
+    "scrum master",
+    "agile coach",
+]
+
+[[categories.families]]
+id = "BUSINESS_TECH"
+label = "Business & Tech"
+points = 17
+realism_bonus = 2
+keywords = [
+    "business analyst",
+    "technology analyst",
+    "technical consultant",
+    "technology consulting",
+    "digital consultant",
+    "it consultant",
+    "junior consultant",
+    "strategy consultant",
+]
+
+[[categories.families]]
+id = "ENTERPRISE_IT"
+label = "Enterprise IT"
+points = 17
+realism_bonus = 2
+keywords = [
+    "service management",
+    "itsm",
+    "service delivery",
+    "it operations",
+    "technical operations",
+    "application support",
+    "application management",
+    "application analyst",
+    "application manager",
+    "systems analyst",
+    "system analyst",
+    "business systems",
+    "enterprise application",
+    "implementation consultant",
+    "implementation specialist",
+    "integration specialist",
+    "saas implementation",
+    " erp ",
+    " crm ",
+    "cloud support",
+    "infrastructure operations",
+    "it governance",
+    "change management",
+    "release management",
+    "incident management",
+    "problem management",
+    "it service",
+]
+
+[[categories.families]]
+id = "BROADER_PROFESSIONAL"
+label = "Broader Professional"
+points = 14
+realism_bonus = 2
+keywords = [
+    "operations analyst",
+    "business operations",
+    "digital operations",
+    "supply chain",
+    "customer success",
+    "rotational",
+    "graduate programme",
+    "graduate program",
+    "trainee programme",
+    "trainee program",
+]
