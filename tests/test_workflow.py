@@ -50,7 +50,6 @@ class WorkflowTests(unittest.TestCase):
         self.assertLess(refresh.index("id: ready"), refresh.index("id: pages"))
         after_gate = refresh[refresh.index("id: ready"):]
         self.assertNotIn("steps.gate.outputs.run", after_gate)
-        self.assertIn("pages: read", (WORKFLOWS / "setup.yml").read_text())
 
     def test_copies_skip_until_setup_replaces_the_authors_config(self):
         refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
@@ -61,6 +60,46 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(marker, Path("tests/fixtures/default-jobs-agent.toml").read_text())
         from jobs_agent.setup import build_config
         self.assertNotIn(marker, build_config("software", "Leipzig"))
+
+    def test_setup_deploys_in_the_same_run_through_the_refresh_workflow(self):
+        setup = (WORKFLOWS / "setup.yml").read_text()
+        refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
+        # No deploy (or dispatch) of its own: it calls the reusable refresh workflow,
+        # which builds, uploads the Pages artifact and deploys in one job.
+        for absent in ("actions/deploy-pages", "actions/upload-pages-artifact", "gh workflow run"):
+            self.assertNotIn(absent, setup)
+        deploy_job = setup[setup.index("\n  deploy:"):]
+        self.assertIn("needs: setup", deploy_job)
+        self.assertIn("uses: ./.github/workflows/refresh-jobs.yml", deploy_job)
+        self.assertIn("send_test_notification: true", deploy_job)
+        self.assertIn("secrets: inherit", deploy_job)
+        for permission in ("contents: write", "pages: write", "id-token: write", "issues: write", "actions: read"):
+            self.assertIn(permission, deploy_job)
+            self.assertIn(permission, refresh)
+        self.assertIn("workflow_call:", refresh)
+        self.assertLess(refresh.index("uses: actions/upload-pages-artifact"), refresh.index("uses: actions/deploy-pages"))
+
+    def test_called_refresh_builds_the_config_setup_just_pushed(self):
+        refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
+        self.assertIn("ref: ${{ github.ref }}", refresh)
+        self.assertNotIn("github.event_name == 'workflow_dispatch' && inputs.send_test_notification", refresh)
+
+    def test_setup_does_not_hold_the_refresh_concurrency_group_for_the_whole_run(self):
+        setup = (WORKFLOWS / "setup.yml").read_text()
+        top_level = setup[:setup.index("\njobs:")]
+        self.assertNotIn("concurrency:", top_level)  # would deadlock with refresh-jobs.yml
+        self.assertIn("group: jobs-dashboard", setup)
+
+    def test_actions_are_on_node24_majors(self):
+        minimum = {"actions/checkout": 7, "actions/setup-python": 7, "actions/configure-pages": 6,
+                   "actions/upload-pages-artifact": 5, "actions/deploy-pages": 5}
+        for path in WORKFLOWS.glob("*.yml"):
+            for line in path.read_text().splitlines():
+                if "uses: actions/" not in line:
+                    continue
+                action, version = line.split("uses:", 1)[1].strip().split("@")
+                with self.subTest(file=path.name, action=action):
+                    self.assertGreaterEqual(int(version.lstrip("v").split(".")[0]), minimum[action])
 
     def test_repository_config_is_valid_toml(self):
         with open("jobs-agent.toml", "rb") as handle:
