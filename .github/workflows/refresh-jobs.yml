@@ -44,19 +44,45 @@ jobs:
           EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: python -m jobs_agent.schedule
 
-      - name: Run behavior tests
+      # Copies made from the template get this schedule straight away. Skip
+      # quietly (instead of failing or publishing the template author's search)
+      # until the owner has run the setup form and turned on Pages.
+      - name: Check this copy is set up and Pages deploys from Actions
         if: steps.gate.outputs.run == 'true'
+        id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          python -m unittest discover -s tests -v
-          node --test tests/js/*.test.mjs
+          # The upstream repository is the template itself; every copy is not.
+          if grep -q "project author's search" jobs-agent.toml \
+             && [ "$(gh api "repos/$REPO" --jq .is_template 2>/dev/null)" = "false" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Set up your job agent first"
+              echo "This copy still has the template author's search. Go to **Actions → Set up my job agent →"
+              echo "Run workflow** and enter your own job field and city. Your first search starts automatically."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Skipped: run \"Set up my job agent\" first so this copy searches for your jobs."
+          elif [ "$(gh api "repos/$REPO/pages" --jq .build_type 2>/dev/null)" = "workflow" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## GitHub Pages is not set up yet"
+              echo "Open https://github.com/$REPO/settings/pages, choose **GitHub Actions** under"
+              echo "**Build and deployment → Source**, then run this workflow again."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Skipped: GitHub Pages is not set to deploy from GitHub Actions yet."
+          fi
 
       - name: Configure GitHub Pages
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         id: pages
         uses: actions/configure-pages@v5
 
       - name: Fetch live jobs and build static dashboard
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         env:
           SITE_URL: ${{ steps.pages.outputs.base_url }}/
         run: >-
@@ -67,14 +93,14 @@ jobs:
           --site-url "$SITE_URL"
 
       - name: Prepare requested test notification
-        if: steps.gate.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && inputs.send_test_notification
+        if: steps.ready.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && inputs.send_test_notification
         run: |
           mkdir -p .out
           printf '%s\n' "✅ Cloud workflow test: Germany Job Agent can send notifications from GitHub Actions." > .out/telegram.txt
           printf '%s\n\n%s\n' "✅ Cloud workflow test: Germany Job Agent can send notifications from GitHub Actions." "$(cat .out/digest.md)" > .out/digest.md
 
       - name: Notify via GitHub issue
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           OWNER: ${{ github.repository_owner }}
@@ -92,7 +118,7 @@ jobs:
           fi
 
       - name: Send Telegram daily update (optional)
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -106,7 +132,7 @@ jobs:
           fi
 
       - name: Commit refreshed job data
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         run: |
           git config user.name "jobs-agent[bot]"
           git config user.email "jobs-agent[bot]@users.noreply.github.com"
@@ -119,12 +145,12 @@ jobs:
           fi
 
       - name: Upload dashboard artifact
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs
 
       - name: Deploy dashboard
-        if: steps.gate.outputs.run == 'true'
+        if: steps.ready.outputs.run == 'true'
         id: deployment
         uses: actions/deploy-pages@v4

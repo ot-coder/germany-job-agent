@@ -39,6 +39,7 @@ on:
 permissions:
   contents: write
   actions: write
+  pages: read
 
 concurrency:
   group: jobs-dashboard
