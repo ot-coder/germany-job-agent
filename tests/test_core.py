@@ -187,11 +187,11 @@ class ScoringTests(unittest.TestCase):
         self.assertGreaterEqual(score, 70)
         self.assertTrue(any("entry-level" in reason.lower() for reason in reasons))
 
-    def test_july_2027_availability_not_penalized_by_ceremony_date(self):
-        base = make_job("Graduate Software Engineer 2027", "Start date July 2027.")
+    def test_later_graduation_date_mention_is_not_penalized(self):
+        base = make_job("Graduate Software Engineer", "Start date in July.")
         with_ceremony_text = make_job(
-            "Graduate Software Engineer 2027",
-            "Start date July 2027. Candidates who graduate in October 2027 are welcome to apply.",
+            "Graduate Software Engineer",
+            "Start date in July. Candidates who graduate later in the year are welcome to apply.",
         )
         base_score, _ = score_job(base)
         ceremony_score, _ = score_job(with_ceremony_text)
