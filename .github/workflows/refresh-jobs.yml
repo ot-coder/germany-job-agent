@@ -8,6 +8,16 @@ on:
         required: false
         type: boolean
         default: false
+  # setup.yml calls this after saving a new configuration, so the first build,
+  # artifact upload and Pages deploy happen in the same run. (Its push, made
+  # with GITHUB_TOKEN, would not trigger a workflow by itself.)
+  workflow_call:
+    inputs:
+      send_test_notification:
+        description: "Send a test notification (GitHub issue, plus Telegram if configured)"
+        required: false
+        type: boolean
+        default: false
   schedule:
     # GitHub cron uses UTC. Running at 06:00 and 07:00 lets the gate below
     # select 08:00 Europe/Berlin across daylight-saving changes.
@@ -19,6 +29,7 @@ permissions:
   pages: write
   id-token: write
   issues: write
+  actions: read # deploy-pages looks up the uploaded artifact
 
 concurrency:
   group: jobs-dashboard
@@ -31,9 +42,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          # The branch tip, not github.sha: when setup.yml calls this workflow,
+          # github.sha is the commit from before setup pushed the new config.
+          ref: ${{ github.ref }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -79,7 +94,7 @@ jobs:
       - name: Configure GitHub Pages
         if: steps.ready.outputs.run == 'true'
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Fetch live jobs and build static dashboard
         if: steps.ready.outputs.run == 'true'
@@ -93,7 +108,7 @@ jobs:
           --site-url "$SITE_URL"
 
       - name: Prepare requested test notification
-        if: steps.ready.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && inputs.send_test_notification
+        if: steps.ready.outputs.run == 'true' && inputs.send_test_notification
         run: |
           mkdir -p .out
           printf '%s\n' "✅ Cloud workflow test: Germany Job Agent can send notifications from GitHub Actions." > .out/telegram.txt
@@ -146,11 +161,11 @@ jobs:
 
       - name: Upload dashboard artifact
         if: steps.ready.outputs.run == 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: docs
 
       - name: Deploy dashboard
         if: steps.ready.outputs.run == 'true'
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
