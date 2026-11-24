@@ -38,9 +38,8 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      run: ${{ steps.ready.outputs.run }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -165,7 +164,20 @@ jobs:
         with:
           path: docs
 
+  # A separate job, not a step right after the upload: deploy-pages can miss an
+  # artifact finalised a moment earlier in the same job ("Found 0 artifact(s)",
+  # actions/deploy-pages#451). Starting after the refresh job completes avoids it.
+  deploy:
+    needs: refresh
+    if: needs.refresh.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy dashboard
-        if: steps.ready.outputs.run == 'true'
         id: deployment
         uses: actions/deploy-pages@v5
