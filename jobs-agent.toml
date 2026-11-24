@@ -2,14 +2,14 @@
 # Re-run the "Set up my job agent" workflow, or edit this file by hand.
 # Reference: https://github.com/ot-coder/germany-job-agent#configuration
 #
-# This copy is the project author's own search: early-career technology and
-# technology-adjacent roles across Germany. Why it looks like this:
-# docs/JOB_SEARCH_STRATEGY.md
+# This copy is the project author's search: early-career technology and
+# technology-adjacent roles across Germany. How it ranks: guides/ranking.md
 
 [profile]
 title = "Germany CS Jobs"
 subtitle = "Live Werkstudent and entry-level technology roles, ranked for computer-science students in Germany."
-city = "Leipzig"
+# Only needed for "local" categories.
+city = ""
 radius_km = 35
 nearby_towns = []
 # 0-100. Jobs below min_score are hidden; new jobs at notify_min_score or above

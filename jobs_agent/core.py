@@ -1,6 +1,6 @@
 """Classification and the weighted 0-100 ranking model.
 
-See docs/JOB_SEARCH_STRATEGY.md for why the rules and weights are what they
+See guides/ranking.md for why the rules and weights are what they
 are. The role families and search terms themselves are configuration
 (``jobs-agent.toml``; defaults in ``config.py``), so other fields can reuse the
 same model.
@@ -105,7 +105,7 @@ _CAREER_VALUE_TERMS = (
 )
 
 # Small, intentionally short known-employer map. Anything not listed defaults
-# to "Core" rather than inventing false precision. See docs/JOB_SEARCH_STRATEGY.md.
+# to "Core" rather than inventing false precision. See guides/ranking.md.
 KNOWN_EMPLOYERS: dict[str, str] = {
     "google": "Reach", "amazon": "Reach", "microsoft": "Reach", "meta": "Reach",
     "apple": "Reach", "netflix": "Reach", "mckinsey": "Reach", "bcg": "Reach",
@@ -242,7 +242,7 @@ def _years_required(text: str) -> int:
 
 def _eligibility_score(text: str) -> tuple[int, str]:
     if _years_required(text) >= 3 or any(term in text for term in _STRONG_NEGATIVE_TERMS):
-        return 4, "Experience requirement likely exceeds candidate profile"
+        return 4, "Experience requirement likely above entry level"
     if any(term in text for term in JUNIOR_TERMS):
         return 20, "Clear entry-level/student framing"
     if _MODERATE_EXPERIENCE_PATTERN.search(text):
