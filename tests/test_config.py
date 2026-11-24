@@ -16,7 +16,10 @@ def ba_job(title, town, ref):
 
 class ConfigTests(unittest.TestCase):
     def test_repository_config_reproduces_default_profile(self):
-        self.assertEqual(load_config(Path(__file__).parent.parent / "jobs-agent.toml"), DEFAULT_PROFILE)
+        # A fixture, not the repo-root jobs-agent.toml: the setup workflow
+        # overwrites that file with each user's own answers.
+        fixture = Path(__file__).parent / "fixtures" / "default-jobs-agent.toml"
+        self.assertEqual(load_config(fixture), DEFAULT_PROFILE)
 
     def test_missing_default_file_falls_back_but_explicit_path_must_exist(self):
         with tempfile.TemporaryDirectory() as directory:

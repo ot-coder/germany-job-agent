@@ -37,6 +37,31 @@ class WorkflowTests(unittest.TestCase):
         for name in ("field", "city", "radius_km", "level", "scope", "local_part_time"):
             self.assertIn(f"{name}:", workflow)
 
+    def test_tests_run_in_ci_not_in_the_daily_deploy(self):
+        refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
+        self.assertNotIn("unittest", refresh)
+        ci = (WORKFLOWS / "ci.yml").read_text()
+        self.assertIn("push:", ci)
+        self.assertIn("pull_request:", ci)
+        self.assertIn("python -m unittest discover -s tests -v", ci)
+
+    def test_deploy_waits_for_pages_instead_of_failing_in_new_copies(self):
+        refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
+        self.assertLess(refresh.index("id: ready"), refresh.index("id: pages"))
+        after_gate = refresh[refresh.index("id: ready"):]
+        self.assertNotIn("steps.gate.outputs.run", after_gate)
+        self.assertIn("pages: read", (WORKFLOWS / "setup.yml").read_text())
+
+    def test_copies_skip_until_setup_replaces_the_authors_config(self):
+        refresh = (WORKFLOWS / "refresh-jobs.yml").read_text()
+        marker = "project author's search"
+        self.assertIn(f'grep -q "{marker}" jobs-agent.toml', refresh)
+        self.assertIn(".is_template", refresh)
+        # The author's config carries the marker; the setup form never writes it.
+        self.assertIn(marker, Path("tests/fixtures/default-jobs-agent.toml").read_text())
+        from jobs_agent.setup import build_config
+        self.assertNotIn(marker, build_config("software", "Leipzig"))
+
     def test_repository_config_is_valid_toml(self):
         with open("jobs-agent.toml", "rb") as handle:
             self.assertIn("categories", tomllib.load(handle))
