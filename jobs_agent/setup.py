@@ -15,12 +15,18 @@ from .config import CONFIG_FILENAME, DEFAULT_PROFILE, parse_config
 
 LEVELS = {
     "student": {
-        "levels": ["werkstudent", "entry-level", "part-time", "minijob"],
+        "levels": ["werkstudent", "internship", "entry-level", "part-time", "minijob"],
         "prefixes": ["werkstudent", "junior"],
     },
-    "entry": {"levels": ["entry-level", "werkstudent"], "prefixes": ["junior", "berufseinsteiger"]},
-    "any": {"levels": ["werkstudent", "entry-level", "part-time", "minijob", "any"], "prefixes": [""]},
+    "entry": {"levels": ["entry-level", "werkstudent", "internship"], "prefixes": ["junior", "berufseinsteiger"]},
+    # "any" still rejects senior/lead/head-of roles; the score rewards junior framing.
+    "any": {"levels": ["any"], "prefixes": [""]},
 }
+PART_TIME_LABEL = "Part-time & Minijob"
+PART_TIME_LEVELS = ["werkstudent", "part-time", "minijob"]
+PART_TIME_QUERIES = [
+    "minijob", "teilzeit", "studentenjob", "aushilfe lager", "aushilfe gastronomie", "aushilfe restaurant",
+]
 MAX_TERMS = 6
 
 
@@ -81,7 +87,11 @@ def build_config(
         f"radius_km = {radius_km}",
         "# Leave empty to trust the Bundesagentur radius search; list towns to restrict 'local' tabs to them.",
         "nearby_towns = []",
+        "# 0-100. Jobs below min_score are hidden; new jobs at notify_min_score or above",
+        "# (at most notify_limit per day) are sent as your daily notification.",
         f"min_score = {DEFAULT_PROFILE.min_score}",
+        f"notify_min_score = {DEFAULT_PROFILE.notify_min_score}",
+        f"notify_limit = {DEFAULT_PROFILE.notify_limit}",
         f"include_remote = {'true' if include_remote else 'false'}",
         "# Optional: your own Google OAuth client ID for Gmail auto-detection (see guides/gmail.md).",
         'gmail_client_id = ""',
@@ -97,16 +107,15 @@ def build_config(
         f"queries = {_q(queries)}",
     ]
     if local_part_time:
-        part_time = DEFAULT_PROFILE.category("part-time")
         lines += [
             "",
             "[[categories]]",
             'id = "part-time"',
-            f"label = {_q(part_time.label)}",
+            f"label = {_q(PART_TIME_LABEL)}",
             'scope = "local"',
             "keywords = []",
-            f"levels = {_q(list(part_time.levels))}",
-            f"queries = {_q(list(part_time.queries))}",
+            f"levels = {_q(PART_TIME_LEVELS)}",
+            f"queries = {_q(PART_TIME_QUERIES)}",
         ]
     return "\n".join(lines) + "\n"
 

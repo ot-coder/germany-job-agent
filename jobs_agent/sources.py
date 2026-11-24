@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 import json
@@ -8,8 +9,11 @@ from typing import Callable
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
-from .config import DEFAULT_PROFILE, Profile
-from .core import Job, categorize, classify_role, plain_text, stable_job_id
+from .config import DEFAULT_PROFILE, DEFAULT_QUERIES, Profile
+from .core import IRRELEVANT, Job, plain_text, score_job, stable_job_id
+
+# The default profile's curated Bundesagentur searches (see config.py).
+BA_QUERIES = DEFAULT_QUERIES
 
 
 USER_AGENT = "Mozilla/5.0 (compatible; GermanyJobAgent/0.2; +https://github.com/ot-coder/germany-job-agent)"
@@ -26,7 +30,6 @@ def normalize_arbeitnow(raw: dict, profile: Profile = DEFAULT_PROFILE) -> Job:
     company = str(raw.get("company_name", "Unknown")).strip()
     location = str(raw.get("location", "Germany")).strip() or "Germany"
     description = plain_text(str(raw.get("description", "")))
-    role_type = classify_role(title, description)
     created = raw.get("created_at")
     published_at = ""
     if isinstance(created, (int, float)):
@@ -39,11 +42,11 @@ def normalize_arbeitnow(raw: dict, profile: Profile = DEFAULT_PROFILE) -> Job:
         url=str(raw.get("url", "")),
         description=description,
         source="arbeitnow",
-        role_type=role_type,
         remote=bool(raw.get("remote", False)),
         published_at=published_at,
     )
-    return categorize(job, profile)
+    job.score, job.reasons = score_job(job, profile)
+    return job
 
 
 def _display_location(value: object) -> str:
@@ -62,19 +65,19 @@ def normalize_ba(raw: dict, profile: Profile = DEFAULT_PROFILE) -> Job:
     )
     description = plain_text(str(raw.get("beruf") or raw.get("hauptberuf") or ""))
     reference = str(raw.get("refnr") or raw.get("referenznummer") or "").strip()
-    role_type = classify_role(title, description)
     job = Job(
         id=stable_job_id(company, title, location), title=title, company=company,
         location=location or "Deutschland",
         url=f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{reference}",
-        description=description, source="bundesagentur", role_type=role_type,
+        description=description, source="bundesagentur",
         published_at=str(
             raw.get("aktuelleVeroeffentlichungsdatum")
             or raw.get("datumErsteVeroeffentlichung")
             or ""
         ),
     )
-    return categorize(job, profile)
+    job.score, job.reasons = score_job(job, profile)
+    return job
 
 
 def normalize_remotive(raw: dict, profile: Profile = DEFAULT_PROFILE) -> Job:
@@ -82,14 +85,14 @@ def normalize_remotive(raw: dict, profile: Profile = DEFAULT_PROFILE) -> Job:
     company = str(raw.get("company_name", "Unknown")).strip()
     location = str(raw.get("candidate_required_location", "Remote")).strip() or "Remote"
     description = plain_text(str(raw.get("description", "")))
-    role_type = classify_role(title, description)
     job = Job(
         id=stable_job_id(company, title, location), title=title, company=company,
         location=location, url=str(raw.get("url", "")), description=description,
-        source="remotive", role_type=role_type, remote=True,
+        source="remotive", remote=True,
         published_at=str(raw.get("publication_date", "")),
     )
-    return categorize(job, profile)
+    job.score, job.reasons = score_job(job, profile)
+    return job
 
 
 class _BAStateParser(HTMLParser):
@@ -146,11 +149,22 @@ def _ba_search_url(query: str, location_query: str) -> str:
     )
 
 
+@dataclass(slots=True)
+class FetchResult:
+    """Stats travel alongside the passing job list so notifications can say
+    how much was evaluated without re-fetching or re-scoring."""
+
+    jobs: list[Job] = field(default_factory=list)
+    evaluated: int = 0
+    duplicates_removed: int = 0
+    passed_threshold: int = 0
+
+
 def fetch_all(
     fetch_json: Callable[[str], dict] = _fetch_json,
     min_score: int | None = None,
     profile: Profile = DEFAULT_PROFILE,
-) -> list[Job]:
+) -> FetchResult:
     threshold = profile.min_score if min_score is None else min_score
     candidates: list[Job] = []
     radius_ids: set[str] = set()
@@ -197,21 +211,32 @@ def fetch_all(
     if successful_requests == 0:
         raise RuntimeError("All job sources failed; refusing to publish an empty dashboard")
 
+    # Dedupe across all sources BEFORE the threshold, keeping the best-scoring
+    # variant, so a thin listing never beats a richer copy of the same job.
+    evaluated = len(candidates)
+    best: dict[str, Job] = {}
+    for job in candidates:
+        existing = best.get(job.id)
+        if existing is None or job.score > existing.score:
+            best[job.id] = job
+    duplicates_removed = evaluated - len(best)
+
     # With an explicit nearby-town list, only those towns count as local. Without
     # one, trust Bundesagentur's own radius search plus exact city matches.
     strict_towns = bool(profile.nearby_towns)
 
-    def near_home(job: Job) -> bool:
+    def in_area(job: Job) -> bool:
+        category = profile.category(job.category)
+        if category is None or category.scope != "local":
+            return True
         return is_local(job.location, profile) or (not strict_towns and job.id in radius_ids)
 
-    best: dict[str, Job] = {}
-    for job in candidates:
-        if job.category == "other" or job.role_type == "other" or job.score < threshold:
-            continue
-        category = profile.category(job.category)
-        if category is not None and category.scope == "local" and not near_home(job):
-            continue
-        existing = best.get(job.id)
-        if existing is None or job.score > existing.score:
-            best[job.id] = job
-    return sorted(best.values(), key=lambda job: (-job.score, job.title.casefold()))
+    passing = [
+        job for job in best.values()
+        if job.role_family != IRRELEVANT and job.score >= threshold and in_area(job)
+    ]
+    passing.sort(key=lambda job: (-job.score, job.title.casefold()))
+    return FetchResult(
+        jobs=passing, evaluated=evaluated,
+        duplicates_removed=duplicates_removed, passed_threshold=len(passing),
+    )

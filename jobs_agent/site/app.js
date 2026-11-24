@@ -126,30 +126,69 @@ function migrateLegacy() {
 }
 
 // ---------- rendering: jobs ----------
+const ROLE_TYPES = [
+  ['werkstudent', 'Werkstudent'], ['internship', 'Internship'], ['entry-level', 'Entry level'],
+  ['regular', 'Regular'], ['part-time', 'Part-time'], ['minijob', 'Minijob'],
+];
+
 function renderCategoryTabs() {
   const tabs = config.categories.length ? config.categories : [{ id: '', label: 'All jobs' }];
   if (!tabs.some((c) => c.id === ui.category)) ui.category = tabs[0].id;
-  $('#category-tabs').innerHTML = tabs.map((c) => `<button type="button" role="tab" class="tab ${c.id === ui.category ? 'active' : ''}" aria-selected="${c.id === ui.category}" data-action="category" data-id="${esc(c.id)}" data-category="${esc(c.id)}">${esc(c.label)}</button>`).join('');
+  const el = $('#category-tabs');
+  el.hidden = tabs.length < 2;
+  el.innerHTML = tabs.map((c) => `<button type="button" role="tab" class="tab ${c.id === ui.category ? 'active' : ''}" aria-selected="${c.id === ui.category}" data-action="category" data-id="${esc(c.id)}" data-category="${esc(c.id)}">${esc(c.label)}</button>`).join('');
+  renderTypeFilter();
+}
+
+function activeCategory() {
+  return config.categories.find((c) => c.id === ui.category);
+}
+
+// Categories with several role families filter by family; others by role type.
+function renderTypeFilter() {
+  const select = $('#job-type');
+  const families = activeCategory()?.families || [];
+  const byFamily = families.length > 1;
+  const options = byFamily ? families.map((f) => [f.id, f.label]) : ROLE_TYPES;
+  const previous = select.value;
+  select.dataset.field = byFamily ? 'role_family' : 'role_type';
+  select.setAttribute('aria-label', byFamily ? 'Role family' : 'Role type');
+  select.innerHTML = `<option value="">${byFamily ? 'All role families' : 'All role types'}</option>`
+    + options.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('');
+  if (options.some(([value]) => value === previous)) select.value = previous;
+}
+
+// jobs.json written before categories existed has no category: show it in the first tab.
+function jobCategory(j) {
+  return j.category || config.categories[0]?.id || '';
 }
 
 function categoryLabel(id) {
   return config.categories.find((c) => c.id === id)?.label || id;
 }
 
+function familyLabel(j) {
+  const category = config.categories.find((c) => c.id === jobCategory(j));
+  const family = category?.families?.find((f) => f.id === j.role_family);
+  if (family && category.families.length > 1) return family.label;
+  return categoryLabel(jobCategory(j));
+}
+
 function renderJobs() {
   const q = $('#job-search').value.trim().toLowerCase();
   const type = $('#job-type').value;
   const status = $('#job-status').value;
-  const inCategory = jobs.filter((j) => !ui.category || (j.category || '') === ui.category);
+  const inCategory = jobs.filter((j) => !ui.category || jobCategory(j) === ui.category);
+  const typeField = $('#job-type').dataset.field || 'role_type';
   const rows = inCategory.filter((j) => {
     const st = jobStatus(j);
     if (status ? st !== status : st === 'dismissed') return false;
-    if (type && j.role_type !== type) return false;
+    if (type && j[typeField] !== type) return false;
     return !q || `${j.title} ${j.company} ${j.location}`.toLowerCase().includes(q);
   });
   const count = (s) => inCategory.filter((j) => jobStatus(j) === s).length;
   $('#job-stats').innerHTML = [
-    `${rows.length} shown`, `${inCategory.length} in this category`, `${count('saved')} saved`, `${count('applied')} applied`,
+    `${rows.length} shown`, config.categories.length > 1 ? `${inCategory.length} in this category` : `${inCategory.length} live matches`, `${count('saved')} saved`, `${count('applied')} applied`,
   ].map((t) => `<span class="pill">${esc(t)}</span>`).join('');
   $('#jobs').innerHTML = rows.length ? rows.map(jobCard).join('') : '<div class="empty">No jobs match these filters.</div>';
   $('#jobs-count').textContent = jobs.length ? `(${jobs.length})` : '';
@@ -165,7 +204,7 @@ function jobCard(j) {
       ${url ? `<a class="title" href="${esc(url)}" target="_blank" rel="noreferrer" data-action="open-posting" data-id="${id}">${esc(j.title)}</a>` : `<span class="title">${esc(j.title)}</span>`}
       <div class="company">${esc(j.company)}</div></div>
       <div class="score" title="Match score">${esc(j.score)}</div></div>
-    <p class="meta">${esc(j.location)} · ${esc(categoryLabel(j.category))} · ${esc(j.role_type)} · ${esc(j.source)}</p>
+    <p class="meta">${esc(j.location)} · ${esc(familyLabel(j))}${j.role_type ? ` · ${esc(j.role_type)}` : ''} · ${esc(j.source)}</p>
     <p class="reasons">${(j.reasons || []).map(esc).join(' · ')}</p>
     <div class="actions">
       ${btn('toggle-saved', 'Save', st === 'saved')}

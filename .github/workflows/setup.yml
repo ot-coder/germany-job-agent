@@ -19,7 +19,7 @@ on:
         default: 35
         type: number
       level:
-        description: "student = Werkstudent + entry level · entry = entry level · any = any non-senior role"
+        description: "student = Werkstudent, internship, entry level, part-time · entry = entry level + internships · any = any non-senior role"
         required: true
         default: student
         type: choice

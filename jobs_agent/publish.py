@@ -50,32 +50,64 @@ def publish_jobs(
     return new_jobs
 
 
+def notify_tier(score: int) -> tuple[str, str]:
+    """Maps a score to (tier, emoji). Thresholds are a ranking convenience,
+    not a scientific probability — see docs/JOB_SEARCH_STRATEGY.md."""
+    if score >= 90:
+        return "EXCEPTIONAL", "🌟"
+    if score >= 82:
+        return "APPLY", "✅"
+    if score >= 75:
+        return "REVIEW", "👀"
+    return "SILENT", ""
+
+
+def notification_worthy(new_jobs: list[Job], profile: Profile = DEFAULT_PROFILE, cap: int | None = None) -> list[Job]:
+    """Anti-spam rule shared by Telegram and the GitHub digest.
+
+    Only genuinely new jobs (not previously published) that reach the notify
+    threshold are eligible, highest score first, capped. Jobs that miss the
+    cap or the threshold are still on the dashboard; they are never surfaced
+    later, because publish_jobs() marks them as known once written.
+    """
+    limit = profile.notify_limit if cap is None else cap
+    ranked = sorted(new_jobs, key=lambda job: -job.score)
+    return [job for job in ranked if job.score >= profile.notify_min_score][:limit]
+
+
+def _summary(evaluated: int, new: int, duplicates_removed: int, passed_threshold: int, surfaced: int) -> str:
+    return (
+        f"{evaluated} jobs evaluated · {new} new · "
+        f"{duplicates_removed} duplicates removed · {passed_threshold} passed threshold · "
+        f"{surfaced} surfaced"
+    )
+
+
 def telegram_message(
     new_jobs: list[Job],
+    evaluated: int,
+    duplicates_removed: int,
+    passed_threshold: int,
     site_url: str,
-    limit: int = 8,
-    total_jobs: int | None = None,
+    cap: int | None = None,
     profile: Profile = DEFAULT_PROFILE,
 ) -> str:
-    if not new_jobs:
-        lines = [f"✅ {profile.title}: Daily scan complete", "", "No new suitable roles today."]
-        if total_jobs is not None:
-            noun = "match" if total_jobs == 1 else "matches"
-            lines.append(f"The dashboard currently has {total_jobs} live {noun}.")
-        lines.extend(["", f"Open dashboard: {site_url}"])
-        return "\n".join(lines)
-    noun = "role" if len(new_jobs) == 1 else "roles"
-    lines = [f"{profile.title}: {len(new_jobs)} new suitable {noun}", ""]
-    for job in new_jobs[:limit]:
-        lines.extend([
-            f"• {job.title}",
-            f"  {profile.category_label(job.category)} · {job.company} · {job.location} · {job.score}/100",
-            f"  {job.url}",
-            "",
-        ])
-    if len(new_jobs) > limit:
-        lines.append(f"+ {len(new_jobs) - limit} more")
+    """Concise morning briefing. Empty when nothing new clears the threshold."""
+    worthy = notification_worthy(new_jobs, profile, cap)
+    if not worthy:
+        return ""
+    noun = "role" if len(worthy) == 1 else "roles"
+    lines = [f"{profile.title}: {len(worthy)} new suitable {noun}", ""]
+    for job in worthy:
+        tier, emoji = notify_tier(job.score)
+        lines.append(f"{emoji} {tier} ({job.score}/100) — {job.title}")
+        lines.append(f"   {job.company} · {job.location} · {profile.family_label(job.role_family)}")
+        if job.reasons:
+            lines.append(f"   Why: {'; '.join(job.reasons[:2])}")
+        lines.append(f"   {job.url}")
+        lines.append("")
     lines.append(f"Open dashboard: {site_url}")
+    lines.append(_summary(evaluated, len(new_jobs), duplicates_removed, passed_threshold, len(worthy)))
     return "\n".join(lines)
 
 
@@ -88,28 +120,34 @@ def _md(text: str) -> str:
 
 def digest_markdown(
     new_jobs: list[Job],
+    evaluated: int,
+    duplicates_removed: int,
+    passed_threshold: int,
     site_url: str,
-    limit: int = 25,
     total_jobs: int | None = None,
     profile: Profile = DEFAULT_PROFILE,
 ) -> str:
-    """Body of the daily GitHub issue that notifies the repository owner."""
+    """Body of the daily GitHub issue. Empty (no issue) when nothing qualifies."""
+    worthy = notification_worthy(new_jobs, profile)
+    if not worthy:
+        return ""
+    noun = "role" if len(worthy) == 1 else "roles"
     total = f" The dashboard has **{total_jobs}** live matches." if total_jobs is not None else ""
-    if not new_jobs:
-        return f"✅ Daily scan complete — no new suitable roles today.{total}\n\n[Open dashboard]({site_url})\n"
-    noun = "role" if len(new_jobs) == 1 else "roles"
-    lines = [f"**{len(new_jobs)} new suitable {noun}** today.{total} [Open dashboard]({site_url})", ""]
-    by_category: dict[str, list[Job]] = {}
-    for job in new_jobs[:limit]:
-        by_category.setdefault(job.category, []).append(job)
-    for category_id, jobs in by_category.items():
-        lines.extend([f"### {_md(profile.category_label(category_id))}", ""])
-        for job in jobs:
-            url = job.url if job.url.startswith(("https://", "http://")) else site_url
-            lines.append(
-                f"- [{_md(job.title)}]({url}) — {_md(job.company)} · {_md(job.location)} · {job.score}/100"
-            )
-        lines.append("")
-    if len(new_jobs) > limit:
-        lines.append(f"…and {len(new_jobs) - limit} more on the dashboard.")
+    lines = [f"**{len(worthy)} new suitable {noun}** today.{total} [Open dashboard]({site_url})", ""]
+    many_categories = len(profile.categories) > 1
+    for job in worthy:
+        tier, emoji = notify_tier(job.score)
+        url = job.url if job.url.startswith(("https://", "http://")) else site_url
+        where = profile.category_label(job.category) + " · " if many_categories else ""
+        lines.append(f"- {emoji} **{tier} {job.score}/100** — [{_md(job.title)}]({url})")
+        lines.append(
+            f"  {_md(job.company)} · {_md(job.location)} · {_md(where + profile.family_label(job.role_family))}"
+        )
+        if job.reasons:
+            lines.append(f"  <sub>{_md('; '.join(job.reasons[:2]))}</sub>")
+    remaining = len(new_jobs) - len(worthy)
+    lines.append("")
+    if remaining > 0:
+        lines.append(f"{remaining} more new {'match' if remaining == 1 else 'matches'} below the alert threshold are on the dashboard.")
+    lines.append(f"<sub>{_summary(evaluated, len(new_jobs), duplicates_removed, passed_threshold, len(worthy))}</sub>")
     return "\n".join(lines) + "\n"
