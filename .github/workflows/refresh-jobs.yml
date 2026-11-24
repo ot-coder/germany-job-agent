@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       send_test_notification:
-        description: "Send a Telegram test message even when no new jobs exist"
+        description: "Send a test notification (GitHub issue, plus Telegram if configured)"
         required: false
         type: boolean
         default: false
@@ -18,6 +18,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: jobs-dashboard
@@ -45,23 +46,52 @@ jobs:
 
       - name: Run behavior tests
         if: steps.gate.outputs.run == 'true'
-        run: python -m unittest discover -s tests -v
+        run: |
+          python -m unittest discover -s tests -v
+          node --test tests/js/*.test.mjs
+
+      - name: Configure GitHub Pages
+        if: steps.gate.outputs.run == 'true'
+        id: pages
+        uses: actions/configure-pages@v5
 
       - name: Fetch live jobs and build static dashboard
         if: steps.gate.outputs.run == 'true'
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url }}/
         run: >-
           python -m jobs_agent publish
           --docs docs
           --message .out/telegram.txt
-          --site-url https://ot-coder.github.io/germany-cs-jobs-agent/
+          --digest .out/digest.md
+          --site-url "$SITE_URL"
 
-      - name: Prepare requested Telegram test notification
+      - name: Prepare requested test notification
         if: steps.gate.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && inputs.send_test_notification
         run: |
           mkdir -p .out
-          printf '%s\n' "✅ Cloud workflow test: Germany CS Jobs Agent can send Telegram notifications from GitHub Actions." > .out/telegram.txt
+          printf '%s\n' "✅ Cloud workflow test: Germany Job Agent can send notifications from GitHub Actions." > .out/telegram.txt
+          printf '%s\n\n%s\n' "✅ Cloud workflow test: Germany Job Agent can send notifications from GitHub Actions." "$(cat .out/digest.md)" > .out/digest.md
 
-      - name: Send Telegram daily update
+      - name: Notify via GitHub issue
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ ! -s .out/digest.md ]; then echo "No digest generated."; exit 0; fi
+          day="$(TZ=Europe/Berlin date +%F)"
+          printf '\n---\ncc @%s · Daily digest from your job agent. Older digests close automatically.\n' "$OWNER" >> .out/digest.md
+          gh label create daily-digest --color 0f766e --description "Daily job digest" 2>/dev/null || true
+          for n in $(gh issue list --label daily-digest --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --reason completed >/dev/null || true
+          done
+          if ! gh issue create --title "Job digest · $day" --label daily-digest --assignee "$OWNER" --body-file .out/digest.md; then
+            gh issue create --title "Job digest · $day" --label daily-digest --body-file .out/digest.md \
+              || echo "::warning::Could not open the digest issue. Enable Issues under Settings → General → Features."
+          fi
+
+      - name: Send Telegram daily update (optional)
         if: steps.gate.outputs.run == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -87,10 +117,6 @@ jobs:
           else
             echo "No dashboard changes to commit."
           fi
-
-      - name: Configure GitHub Pages
-        if: steps.gate.outputs.run == 'true'
-        uses: actions/configure-pages@v5
 
       - name: Upload dashboard artifact
         if: steps.gate.outputs.run == 'true'
