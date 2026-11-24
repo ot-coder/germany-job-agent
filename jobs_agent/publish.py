@@ -3,40 +3,14 @@ from __future__ import annotations
 from dataclasses import asdict
 import json
 from pathlib import Path
+import shutil
 
+from .config import DEFAULT_PROFILE, Profile
 from .core import Job
 
 
-STATIC_HTML = r'''<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Germany Student Jobs Agent</title><style>
-:root{color-scheme:dark;--bg:#080c13;--card:#111925;--muted:#94a3b8;--line:#263349;--accent:#5eead4;--blue:#60a5fa}*{box-sizing:border-box}
-body{margin:0;background:radial-gradient(circle at 15% 0,#10243b,#080c13 46%);color:#e8eef7;font:15px system-ui,-apple-system,sans-serif;min-height:100vh}
-main{max-width:1200px;margin:auto;padding:42px 22px 70px}.top{display:flex;justify-content:space-between;align-items:end;gap:20px;flex-wrap:wrap}
-h1{font-size:clamp(34px,6vw,62px);line-height:.95;margin:0;letter-spacing:-.04em}.sub{color:var(--muted);max-width:650px}.updated{color:var(--muted);font-size:12px}
-.controls{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;margin:14px 0}input,select{background:#111925;border:1px solid var(--line);border-radius:12px;color:#e8eef7;padding:12px 14px;font:inherit}
-.tabs{display:flex;gap:8px;margin-top:28px;flex-wrap:wrap}.tab{font-weight:750;padding:11px 16px}.tab.active{background:#0f766e;border-color:#2dd4bf;color:#fff}
-.stats{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px}.pill{border:1px solid var(--line);background:#0f1723;padding:7px 11px;border-radius:999px;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:15px}.card{background:#111925ed;border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 14px 38px #0005;transition:.18s}.card:hover{transform:translateY(-2px);border-color:#405575}
-.row{display:flex;justify-content:space-between;gap:15px}.title{font-size:20px;font-weight:780;text-decoration:none;color:#f3f7fc}.company{color:var(--accent);font-weight:700;margin-top:5px}.score{font-size:29px;font-weight:850;color:var(--accent)}
-.meta,.reasons{color:var(--muted);font-size:13px;line-height:1.5}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}button,.button{background:#172337;color:#e8eef7;border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;text-decoration:none}button:hover,.button:hover{border-color:var(--blue)}button.active{background:#0f766e;border-color:#2dd4bf}.empty{padding:60px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:18px}@media(max-width:650px){.controls{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
-</style></head><body><main>
-<div class="top"><div><h1>Germany CS Jobs</h1><p class="sub">Live Werkstudent and entry-level technology roles, ranked for computer-science students in Germany.</p></div><div class="updated" id="updated"></div></div>
-<div class="controls"><input id="search" type="search" placeholder="Search title, company, city…"><select id="type"><option value="">All role families</option><option value="CORE_TECH">Core Tech</option><option value="PRODUCT_PROJECT">Product &amp; Project</option><option value="BUSINESS_TECH">Business &amp; Tech</option><option value="ENTERPRISE_IT">Enterprise IT</option><option value="BROADER_PROFESSIONAL">Broader Professional</option></select><select id="status"><option value="">All statuses</option><option value="new">New</option><option value="saved">Saved</option><option value="applied">Applied</option><option value="dismissed">Dismissed</option></select></div>
-<div class="stats" id="stats"></div><section class="grid" id="jobs"><div class="empty">Loading live roles…</div></section>
-</main><script>
-const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const getState=id=>localStorage.getItem('job:'+id)||'new';
-function setState(id,state){localStorage.setItem('job:'+id,state);render()}
-let all=[],activeCategory='cs';
-function setCategory(category){activeCategory=category;document.querySelector('#type').value='';document.querySelectorAll('.tab').forEach(button=>button.classList.toggle('active',button.dataset.category===category));render()}
-function render(){const q=document.querySelector('#search').value.toLowerCase(),type=document.querySelector('#type').value,status=document.querySelector('#status').value;
- const rows=all.filter(j=>(!q||`${j.title} ${j.company} ${j.location}`.toLowerCase().includes(q))&&(!type||j.role_family===type)&&(!status||getState(j.id)===status));
- document.querySelector('#stats').innerHTML=`<span class="pill">${rows.length} shown</span><span class="pill">${all.length} live matches</span><span class="pill">${all.filter(j=>getState(j.id)==='saved').length} saved</span><span class="pill">${all.filter(j=>getState(j.id)==='applied').length} applied</span>`;
- document.querySelector('#jobs').innerHTML=rows.length?rows.map(j=>{const st=getState(j.id);return `<article class="card"><div class="row"><div><a class="title" href="${esc(j.url)}" target="_blank" rel="noreferrer">${esc(j.title)}</a><div class="company">${esc(j.company)}</div></div><div class="score">${j.score}</div></div><p class="meta">${esc(j.location)} · ${esc(j.role_family)} · ${esc(j.source)} · ${esc(st)}</p><p class="reasons">${j.reasons.map(esc).join(' · ')}</p><div class="actions">${['saved','applied','dismissed'].map(s=>`<button class="${st===s?'active':''}" onclick="setState('${esc(j.id)}','${s}')">${s[0].toUpperCase()+s.slice(1)}</button>`).join('')}<a class="button" href="${esc(j.url)}" target="_blank" rel="noreferrer">Apply ↗</a></div></article>`}).join(''):'<div class="empty">No jobs match these filters.</div>'}
-for(const id of ['search','type','status'])document.querySelector('#'+id).addEventListener(id==='search'?'input':'change',render);
-fetch('./jobs.json?'+Date.now()).then(r=>r.json()).then(data=>{all=data.sort((a,b)=>b.score-a.score);document.querySelector('#updated').textContent=`Updated ${new Date(document.lastModified).toLocaleString()}`;render()}).catch(()=>document.querySelector('#jobs').innerHTML='<div class="empty">Could not load jobs. Please refresh.</div>');
-</script></body></html>'''
+SITE_DIR = Path(__file__).parent / "site"
+SITE_FILES = ("index.html", "app.js", "gmail.js", "styles.css")
 
 
 def _load_previous(path: Path) -> dict[str, dict]:
@@ -49,7 +23,9 @@ def _load_previous(path: Path) -> dict[str, dict]:
     return {str(item.get("id")): item for item in value if isinstance(item, dict) and item.get("id")}
 
 
-def publish_jobs(jobs: list[Job], docs_dir: str | Path) -> list[Job]:
+def publish_jobs(
+    jobs: list[Job], docs_dir: str | Path, profile: Profile = DEFAULT_PROFILE
+) -> list[Job]:
     docs = Path(docs_dir)
     docs.mkdir(parents=True, exist_ok=True)
     jobs_path = docs / "jobs.json"
@@ -65,7 +41,11 @@ def publish_jobs(jobs: list[Job], docs_dir: str | Path) -> list[Job]:
         exported.append(item)
     exported.sort(key=lambda item: (-int(item["score"]), item["title"].casefold()))
     jobs_path.write_text(json.dumps(exported, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (docs / "index.html").write_text(STATIC_HTML, encoding="utf-8")
+    for name in SITE_FILES:
+        shutil.copyfile(SITE_DIR / name, docs / name)
+    (docs / "config.json").write_text(
+        json.dumps(profile.public(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     (docs / ".nojekyll").write_text("", encoding="utf-8")
     return new_jobs
 
@@ -82,38 +62,92 @@ def notify_tier(score: int) -> tuple[str, str]:
     return "SILENT", ""
 
 
-def telegram_message(
-    new_jobs: list[Job], evaluated: int, duplicates_removed: int,
-    passed_threshold: int, site_url: str, cap: int = 5,
-) -> str:
-    """Builds a concise morning-briefing Telegram digest.
+def notification_worthy(new_jobs: list[Job], profile: Profile = DEFAULT_PROFILE, cap: int | None = None) -> list[Job]:
+    """Anti-spam rule shared by Telegram and the GitHub digest.
 
-    Anti-spam rule: only genuinely new jobs (not previously published) that
-    reach REVIEW (75+) are eligible, ranked highest score first, capped at
-    `cap`. Jobs that miss the cap or sit below the notify threshold are still
-    published to the dashboard by publish_jobs() — they are simply never
-    surfaced in Telegram, today or on a later run, because they are already
-    marked "known" once written to docs/jobs.json.
+    Only genuinely new jobs (not previously published) that reach the notify
+    threshold are eligible, highest score first, capped. Jobs that miss the
+    cap or the threshold are still on the dashboard; they are never surfaced
+    later, because publish_jobs() marks them as known once written.
     """
+    limit = profile.notify_limit if cap is None else cap
     ranked = sorted(new_jobs, key=lambda job: -job.score)
-    worthy = [job for job in ranked if job.score >= 75][:cap]
-    summary = (
-        f"{evaluated} jobs evaluated · {len(new_jobs)} new · "
+    return [job for job in ranked if job.score >= profile.notify_min_score][:limit]
+
+
+def _summary(evaluated: int, new: int, duplicates_removed: int, passed_threshold: int, surfaced: int) -> str:
+    return (
+        f"{evaluated} jobs evaluated · {new} new · "
         f"{duplicates_removed} duplicates removed · {passed_threshold} passed threshold · "
-        f"{len(worthy)} surfaced"
+        f"{surfaced} surfaced"
     )
+
+
+def telegram_message(
+    new_jobs: list[Job],
+    evaluated: int,
+    duplicates_removed: int,
+    passed_threshold: int,
+    site_url: str,
+    cap: int | None = None,
+    profile: Profile = DEFAULT_PROFILE,
+) -> str:
+    """Concise morning briefing. Empty when nothing new clears the threshold."""
+    worthy = notification_worthy(new_jobs, profile, cap)
     if not worthy:
         return ""
     noun = "role" if len(worthy) == 1 else "roles"
-    lines = [f"Germany CS Jobs: {len(worthy)} new suitable {noun}", ""]
+    lines = [f"{profile.title}: {len(worthy)} new suitable {noun}", ""]
     for job in worthy:
         tier, emoji = notify_tier(job.score)
         lines.append(f"{emoji} {tier} ({job.score}/100) — {job.title}")
-        lines.append(f"   {job.company} · {job.location} · {job.role_family}")
+        lines.append(f"   {job.company} · {job.location} · {profile.family_label(job.role_family)}")
         if job.reasons:
             lines.append(f"   Why: {'; '.join(job.reasons[:2])}")
         lines.append(f"   {job.url}")
         lines.append("")
     lines.append(f"Open dashboard: {site_url}")
-    lines.append(summary)
+    lines.append(_summary(evaluated, len(new_jobs), duplicates_removed, passed_threshold, len(worthy)))
     return "\n".join(lines)
+
+
+def _md(text: str) -> str:
+    """Neutralise characters that would turn job text into Markdown/HTML or @mentions."""
+    for char in "\\`*_[]<>|#@":
+        text = text.replace(char, "\\" + char)
+    return text
+
+
+def digest_markdown(
+    new_jobs: list[Job],
+    evaluated: int,
+    duplicates_removed: int,
+    passed_threshold: int,
+    site_url: str,
+    total_jobs: int | None = None,
+    profile: Profile = DEFAULT_PROFILE,
+) -> str:
+    """Body of the daily GitHub issue. Empty (no issue) when nothing qualifies."""
+    worthy = notification_worthy(new_jobs, profile)
+    if not worthy:
+        return ""
+    noun = "role" if len(worthy) == 1 else "roles"
+    total = f" The dashboard has **{total_jobs}** live matches." if total_jobs is not None else ""
+    lines = [f"**{len(worthy)} new suitable {noun}** today.{total} [Open dashboard]({site_url})", ""]
+    many_categories = len(profile.categories) > 1
+    for job in worthy:
+        tier, emoji = notify_tier(job.score)
+        url = job.url if job.url.startswith(("https://", "http://")) else site_url
+        where = profile.category_label(job.category) + " · " if many_categories else ""
+        lines.append(f"- {emoji} **{tier} {job.score}/100** — [{_md(job.title)}]({url})")
+        lines.append(
+            f"  {_md(job.company)} · {_md(job.location)} · {_md(where + profile.family_label(job.role_family))}"
+        )
+        if job.reasons:
+            lines.append(f"  <sub>{_md('; '.join(job.reasons[:2]))}</sub>")
+    remaining = len(new_jobs) - len(worthy)
+    lines.append("")
+    if remaining > 0:
+        lines.append(f"{remaining} more new {'match' if remaining == 1 else 'matches'} below the alert threshold are on the dashboard.")
+    lines.append(f"<sub>{_summary(evaluated, len(new_jobs), duplicates_removed, passed_threshold, len(worthy))}</sub>")
+    return "\n".join(lines) + "\n"

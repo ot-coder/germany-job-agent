@@ -1,83 +1,147 @@
-# Germany Student Jobs Agent
+# Germany Job Agent
 
-A dependency-free Python agent that searches Germany for both **computer-science opportunities** and **general part-time/minijob work**, removes duplicates, publishes a switchable live dashboard, and sends dependable daily Telegram updates.
+Find jobs in Germany for **your field and your city**, get a **daily digest** on your phone, and **track every application** — without signing up anywhere, installing anything, or handing your data to anyone.
 
-## Live dashboard
+- **Daily job feed.** Every morning at 08:00 (Berlin time) it searches the Bundesagentur für Arbeit, Arbeitnow and Remotive, removes duplicates, ranks each listing with a transparent 100-point score (role fit, experience level, location, German-language requirement, recency …), and publishes a dashboard on your own GitHub Pages site.
+- **Daily notification, no spam.** Only the best *new* matches (score 75+, at most 5 a day) arrive as a GitHub notification (GitHub mobile app and email); quiet days send nothing. Telegram is optional.
+- **Application tracker.** Press **Applied** on a listing, or answer *“Did you apply?”* when you come back from a posting, and it lands in *My applications* with status, notes, follow-up reminders and stats. Gmail auto-detection is optional.
+- **Your data stays yours.** The job feed is public listings. Everything you save, apply to or write is stored only in your browser. There is no server and no database, and nothing is collected.
 
-**https://ot-coder.github.io/germany-cs-jobs-agent/**
+Live example: **https://ot-coder.github.io/germany-job-agent/**: the author's own search for early-career technology and technology-adjacent roles across Germany ([why it is set up this way](docs/JOB_SEARCH_STRATEGY.md)).
 
-The dashboard refreshes automatically from public internet job sources every day at approximately **08:00 Europe/Berlin**. Use its category switch to move between Germany-wide **CS & Tech** listings and **Part-time & Minijob** listings restricted to Leipzig and nearby towns. Saved, applied, and dismissed states stay private in your browser's local storage; they are not committed to GitHub.
+## Get your own in 5 minutes
 
-## What it does
+You only need a free GitHub account.
 
-- Searches public endpoints from:
-  - Bundesagentur für Arbeit Jobsuche
-  - Arbeitnow
-  - Remotive (remote roles)
-- Uses Germany-focused technical searches plus Leipzig-area queries such as `minijob`, `teilzeit`, `studentenjob`, `aushilfe lager`, and `aushilfe gastronomie`.
-- Separates technical roles from nontechnical part-time work such as warehouse, restaurant, retail, delivery, and similar jobs whenever the title signals part-time, minijob, student job, or temporary-help work.
-- Keeps general part-time results only when the posting location is Leipzig or a nearby town such as Markkleeberg, Schkeuditz, Taucha, Markranstädt, Zwenkau, Delitzsch, Eilenburg, Borna, Grimma, or another configured Leipzig-area town.
-- Rejects senior roles and unrelated full-time nontechnical roles.
-- Scores matches by student fit, category relevance, German location, and English-language wording.
-- Deduplicates jobs across sources.
-- Publishes `docs/index.html` and `docs/jobs.json` to GitHub Pages.
-- Sends new matches through Telegram and a daily completion heartbeat when no new jobs are found.
+1. **Copy it.** Click **Use this template → Create a new repository** at the top of this page. Keep it **public**: GitHub Pages is free for public repositories.
+2. **Turn on the website.** In your new repository open **Settings → Pages**, and under *Build and deployment → Source* choose **GitHub Actions**.
+3. **Tell it what you're looking for.** Open the **Actions** tab, choose **Set up my job agent → Run workflow**, and fill in:
+   | Field | Example |
+   |---|---|
+   | Job field (comma-separated, add German words) | `marketing, social media, kommunikation` |
+   | City | `Köln` |
+   | Radius (km) | `30` |
+   | Level | `student` (Werkstudent, internship, entry level, part-time), `entry`, or `any` (any non-senior role) |
+   | Where to look for your field | `germany` or `local` |
+   | Also list part-time/minijobs near you | ✓ |
 
-## Cloud automation
+That's it. The first search starts automatically. A few minutes later your dashboard is live at `https://<your-username>.github.io/<repository-name>/` and your first digest issue appears.
 
-`.github/workflows/refresh-jobs.yml` runs on GitHub Actions:
+> **Phone notifications:** install the GitHub mobile app and allow notifications. The daily digest is assigned to you, so it shows up there and in your email. To change what you receive, go to **github.com/settings/notifications**.
 
-1. Selects the 08:00 Europe/Berlin run across daylight-saving changes.
-2. Runs the behavior tests.
-3. Fetches current jobs from the internet.
-4. Compares them with the previously published dataset.
-5. Sends a Telegram digest for new jobs or a completion heartbeat when there are none.
-6. Commits refreshed data and deploys GitHub Pages.
+## Tracking applications
 
-Telegram delivery uses encrypted GitHub Actions secrets:
+| How | What happens |
+|---|---|
+| **Applied** button on a job | Adds it to *My applications*, linked to the listing. |
+| Open a posting, then come back | A banner asks *“Did you apply to … ?”*. One tap logs it. |
+| **+ Add application** | Adds a job you found elsewhere. |
+| **Gmail auto-detection** (optional) | Scans recent emails for application confirmations, in your browser. See [guides/gmail.md](guides/gmail.md). |
 
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
+Statuses are Applied, Waiting, Interview, Offer, Rejected and Ghosted. An application with no answer after 14 days is automatically treated as *ghosted* and shows up under **Follow-up needed**.
 
-## Run locally
+**Backups and other devices.** Your tracker lives in the browser you use it in. Use **Settings → Export backup** now and then, and **Import** to restore it or move it to another device or browser. Import also accepts exports from the older *job-tracker* app.
 
-Requires Python 3.11 or newer; there are no third-party dependencies.
+## Configuration
+
+The setup form writes [`jobs-agent.toml`](jobs-agent.toml). You can also edit that file directly on GitHub. Each `[[categories]]` entry becomes one tab on the dashboard.
+
+```toml
+[profile]
+title = "Marketing jobs · Köln"
+city = "Köln"
+radius_km = 30
+nearby_towns = []          # empty: trust the Bundesagentur radius search; or list towns to allow
+min_score = 65             # 0–100; jobs below this are not shown
+notify_min_score = 75      # new jobs at or above this are sent as notifications…
+notify_limit = 5           # …at most this many per day
+include_remote = true      # also pull remote roles from Remotive
+gmail_client_id = ""       # optional, see guides/gmail.md (a client ID is not a secret)
+
+[[categories]]
+id = "field"
+label = "Marketing"
+scope = "germany"          # "germany" or "local" (within radius_km of city)
+keywords = ["marketing", "social media", "kommunikation"]   # one must appear in the job title
+levels = ["werkstudent", "internship", "entry-level", "part-time", "minijob"]  # or ["any"]
+queries = ["werkstudent marketing", "junior marketing"]          # searches sent to the Bundesagentur
+```
+
+**Role families (optional).** Instead of one `keywords` list, a category can split your field into weighted families, each shown as a filter on the dashboard. The live example uses five (Core Tech, Product & Project, Business & Tech, Enterprise IT, Broader Professional); see its [`jobs-agent.toml`](jobs-agent.toml):
+
+```toml
+[[categories.families]]
+id = "PRODUCT_PROJECT"
+label = "Product & Project"
+points = 18                # role-fit share of the score, max 20
+realism_bonus = 2          # small boost for realistic entry points
+keywords = ["product manager", "project coordinator", "scrum master"]
+```
+
+**How the score works.** Every job gets up to 20 points for role fit, 20 for experience level (Werkstudent/junior wording scores high; "5+ years" scores low), 15 for realism, 10 each for location, German-language requirement, keyword relevance and career value, and 5 for recency. Senior, lead, head-of and director titles are always filtered out, but "manager" on its own is not. The reasoning is in [docs/JOB_SEARCH_STRATEGY.md](docs/JOB_SEARCH_STRATEGY.md).
+
+**Job sources:** two of the three sources (Bundesagentur für Arbeit and Arbeitnow) only cover Germany.
+
+## Run it on your own computer instead
+
+Needs Python 3.11 or newer. There are no other dependencies.
 
 ```bash
-# Search now and print the top 10
-python3 -m jobs_agent fetch
-
-# Start the local SQLite-backed dashboard
-python3 -m jobs_agent serve
-# Open http://127.0.0.1:8787
-
-# Build the static GitHub Pages dashboard
-python3 -m jobs_agent publish \
-  --docs docs \
-  --message .out/telegram.txt \
-  --site-url https://ot-coder.github.io/germany-cs-jobs-agent/
-
-# Run tests
-python3 -m unittest discover -s tests -v
+git clone https://github.com/ot-coder/germany-job-agent.git && cd germany-job-agent
+python3 -m jobs_agent setup --field "software, entwickler" --city Leipzig   # writes jobs-agent.toml
+python3 -m jobs_agent serve --refresh                                        # fetch jobs, open http://127.0.0.1:8787
 ```
 
-## Project structure
+Without GitHub Actions there are no daily notifications. Run `serve --refresh` whenever you want fresh listings.
+
+## Privacy
+
+- **Public:** your copy's `jobs-agent.toml` (job field and city) and the job listings, because a free GitHub Pages site needs a public repository.
+- **Private, in your browser only:** saved and dismissed jobs, applications, notes, your Gmail client ID setting and anything detected from Gmail. Gmail is read directly from your browser using *your own* Google OAuth client. The access token is discarded after each scan.
+- **Encrypted GitHub secrets:** your Telegram bot token, if you use Telegram.
+- **Nothing is sent to the project author.** There is no analytics, tracking or telemetry.
+
+## Optional: Telegram
+
+Create a bot with [@BotFather](https://t.me/BotFather), send it any message, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your chat ID. Add both under **Settings → Secrets and variables → Actions** as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+
+## How it works
 
 ```text
-jobs_agent/core.py       classification and scoring
-jobs_agent/sources.py    live source adapters and network fetches
-jobs_agent/store.py      local SQLite persistence
-jobs_agent/web.py        local dashboard and Markdown digest
-jobs_agent/publish.py    static GitHub Pages dashboard export
-jobs_agent/telegram.py   Telegram Bot API notifications
-jobs_agent/cli.py        fetch, digest, serve, and publish commands
-docs/                    generated live dashboard and job dataset
-tests/                   behavior tests
+GitHub Actions (daily, in your copy)        Your browser
+┌──────────────────────────────────┐        ┌───────────────────────────────────┐
+│ jobs_agent publish               │        │ docs/index.html + app.js          │
+│  sources.py  fetch & normalise   │ Pages  │  Jobs tab   ← jobs.json           │
+│  core.py     categorise & score  ├───────►│  Tracker    ← localStorage        │
+│  publish.py  jobs.json, digest   │        │  gmail.js   → Gmail API (optional)│
+│ gh issue create  → notification  │        └───────────────────────────────────┘
+└──────────────────────────────────┘
 ```
 
-## Notes
+```text
+jobs-agent.toml            your search configuration
+jobs_agent/config.py       config loading and defaults
+jobs_agent/sources.py      job sources, local filtering, de-duplication
+jobs_agent/core.py         role classification and scoring
+jobs_agent/publish.py      static site, jobs.json, notification texts
+jobs_agent/setup.py        turns setup answers into jobs-agent.toml
+jobs_agent/site/           the dashboard and tracker (plain HTML/CSS/JS, no build step)
+jobs_agent/cli.py          fetch, publish, serve and setup commands
+.github/workflows/         daily refresh and the one-time setup form
+tests/                     Python tests (unittest) and JS tests (node --test)
+```
 
-- Job availability changes continuously; always verify each posting on its source page.
-- The agent uses public endpoints and identifies itself with a user-agent. Request volume is deliberately modest.
-- CS scoring remains strict, while the separate general category requires a part-time, minijob, Werkstudent, student-job, or temporary-help signal.
-- The public repository contains job listings only—not Telegram credentials or personal application statuses.
+## Contributing
+
+Issues and pull requests are welcome. Run the tests before opening a pull request:
+
+```bash
+python3 -m unittest discover -s tests
+node --test tests/js/*.test.mjs
+```
+
+Job availability changes constantly, so always check a posting on its source page before applying.
+
+## License
+
+[MIT](LICENSE)

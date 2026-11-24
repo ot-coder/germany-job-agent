@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Germany Job Agent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M9 13h14v11H9z M13 13v-3h6v3' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1 id="title">Germany Job Agent</h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <div class="top-side">
+      <span class="updated" id="updated"></span>
+      <button type="button" data-action="open-settings" aria-label="Settings and backup">⚙ Settings</button>
+    </div>
+  </header>
+
+  <nav class="views" aria-label="Views">
+    <a href="#jobs" class="view-link" data-view="jobs">Jobs <span class="count" id="jobs-count"></span></a>
+    <a href="#tracker" class="view-link" data-view="tracker">My applications <span class="count" id="tracker-count"></span></a>
+  </nav>
+
+  <div id="prompt" class="prompt" hidden></div>
+
+  <section id="view-jobs" class="view" aria-label="Job listings">
+    <div class="tabs" id="category-tabs" role="tablist"></div>
+    <div class="controls">
+      <input id="job-search" type="search" placeholder="Search title, company, city…" aria-label="Search jobs">
+      <select id="job-type" aria-label="Role type">
+        <option value="">All role types</option>
+      </select>
+      <select id="job-status" aria-label="Status">
+        <option value="">All except dismissed</option>
+        <option value="new">New</option>
+        <option value="saved">Saved</option>
+        <option value="applied">Applied</option>
+        <option value="dismissed">Dismissed</option>
+      </select>
+    </div>
+    <div class="stats" id="job-stats"></div>
+    <div class="grid" id="jobs"><div class="empty">Loading live roles…</div></div>
+  </section>
+
+  <section id="view-tracker" class="view" aria-label="Application tracker" hidden>
+    <div class="tiles" id="tracker-tiles"></div>
+    <div id="followups"></div>
+    <div class="controls tracker-controls">
+      <input id="app-search" type="search" placeholder="Search company, position, notes…" aria-label="Search applications">
+      <button type="button" class="primary" data-action="add-app">+ Add application</button>
+    </div>
+    <div class="chips" id="status-chips" role="tablist"></div>
+    <div class="list" id="applications"></div>
+  </section>
+
+  <footer class="foot">
+    Your saved jobs and applications stay in this browser and are never uploaded anywhere.
+    Use <button type="button" class="link" data-action="open-settings">Settings → Export</button> to back them up.
+    · <a href="https://github.com/ot-coder/germany-job-agent" target="_blank" rel="noreferrer">Get your own copy</a>
+  </footer>
+</main>
+
+<dialog id="app-dialog">
+  <form id="app-form" method="dialog">
+    <h2 id="app-dialog-title">Add application</h2>
+    <input type="hidden" name="id">
+    <label>Company<input name="company" required maxlength="200"></label>
+    <label>Position<input name="position" required maxlength="200"></label>
+    <div class="two">
+      <label>Applied on<input name="applicationDate" type="date" required></label>
+      <label>Status<select name="status"></select></label>
+    </div>
+    <label>Location<input name="location" maxlength="200"></label>
+    <label>Posting link<input name="url" type="url" placeholder="https://…" maxlength="2000"></label>
+    <label>Notes<textarea name="notes" rows="3" maxlength="5000"></textarea></label>
+    <div class="dialog-actions">
+      <button type="button" class="danger" data-action="delete-app" id="delete-app">Delete</button>
+      <span class="spacer"></span>
+      <button type="button" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settings-dialog">
+  <div class="settings">
+    <h2>Settings</h2>
+
+    <h3>Backup</h3>
+    <p class="hint">Everything is stored only in this browser. Export a backup now and then, or to move to another device.</p>
+    <div class="row-actions">
+      <button type="button" data-action="export">Export backup</button>
+      <label class="button">Import backup or old tracker data<input type="file" id="import-file" accept="application/json,.json" hidden></label>
+    </div>
+
+    <h3>Gmail auto-detection <span class="tag">optional</span></h3>
+    <p class="hint">Scans recent emails <em>in your browser</em> for application confirmations and adds them to your tracker.
+      Needs your own free Google OAuth client ID —
+      <a href="https://github.com/ot-coder/germany-job-agent/blob/main/guides/gmail.md" target="_blank" rel="noreferrer">5-minute guide</a>.</p>
+    <label>OAuth client ID<input id="gmail-client-id" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off"></label>
+    <div class="row-actions">
+      <label class="inline">Look back <input id="gmail-days" type="number" min="1" max="365" value="30"> days</label>
+      <button type="button" class="primary" data-action="gmail-scan">Scan Gmail</button>
+    </div>
+    <p class="hint" id="gmail-status" aria-live="polite"></p>
+
+    <h3>Reset</h3>
+    <div class="row-actions">
+      <button type="button" class="danger" data-action="erase">Erase all data in this browser</button>
+    </div>
+    <div class="dialog-actions"><span class="spacer"></span><button type="button" data-action="close-dialog">Close</button></div>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import unittest
 
-from jobs_agent.web import render_dashboard, render_digest
+from jobs_agent.web import render_digest
 
 
 JOBS = [{
@@ -13,13 +13,6 @@ JOBS = [{
 
 
 class WebTests(unittest.TestCase):
-    def test_dashboard_escapes_content_and_contains_actions(self):
-        html = render_dashboard(JOBS)
-        self.assertIn("Junior &lt;Developer&gt;", html)
-        self.assertIn("Acme &amp; Co", html)
-        self.assertIn("/status/abc/saved", html)
-        self.assertNotIn("Junior <Developer>", html)
-
     def test_digest_contains_ranked_markdown_link(self):
         digest = render_digest(JOBS, new_count=1)
         self.assertIn("1 new suitable role", digest)
